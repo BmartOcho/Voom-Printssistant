@@ -115,7 +115,7 @@ app.get("/api/exports/:id/download", (req, res) => {
   if (!rec || !rec.filePath) {
     return res.status(404).json({ error: "Export not found or file not stored" });
   }
-  res.sendFile(rec.filePath);
+  res.sendFile(path.resolve(rec.filePath));
 });
 
 app.get("/api/exports", (req, res) => {

@@ -25,7 +25,7 @@ async function smoke() {
     const payload = {
       sku: "POSTCARD_4x6",
       jobId: "SMOKE_123",
-      exportUrl: "https://example.com/smoke-test.pdf"
+      exportUrl: "https://pdfobject.com/pdf/sample.pdf"
     };
     
     // Validate payload client-side before sending (mimicking app)
