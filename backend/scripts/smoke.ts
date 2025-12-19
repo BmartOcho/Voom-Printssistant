@@ -1,4 +1,4 @@
-import { ProductRuleSchema, ExportPayloadSchema } from "@printssistant/shared";
+import { ProductRuleSchema, ExportPayloadSchema, ExportRecordSchema } from "@printssistant/shared";
 
 async function smoke() {
   console.log("💨 Starting smoke test...");
@@ -44,7 +44,10 @@ async function smoke() {
 
     const json = await res.json();
     if (!json.ok) throw new Error("Export response not ok");
-    console.log("✅ Export posted successfully:", json.record.id);
+    
+    // Validate response contract
+    const record = ExportRecordSchema.parse(json.record);
+    console.log("✅ Export posted and validated successfully:", record.id);
 
   } catch (e) {
     console.error("❌ Export failed:", e);

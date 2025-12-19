@@ -1,4 +1,4 @@
-import { ProductRule, ProductRuleSchema, ExportPayload } from "@printssistant/shared";
+import { ProductRule, ProductRuleSchema, ExportPayload, ExportRecordSchema } from "@printssistant/shared";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL as string;
 
@@ -23,5 +23,8 @@ export async function postExport(payload: ExportPayload) {
     const txt = await res.text();
     throw new Error(`Export POST failed: ${txt}`);
   }
-  return res.json();
+  const json = await res.json();
+  // Validate contract - throws if backend response is malformed
+  const record = ExportRecordSchema.parse(json.record);
+  return { ...json, record };
 }
