@@ -1,0 +1,7 @@
+{
+  "$schema": "https://www.canva.dev/schemas/canva-app.json",
+  "name": "Printssistant Prepress Helper",
+  "runtime": {
+    "scopes": []
+  }
+}

@@ -1,0 +1,6 @@
+/* Keep it minimal. Canva UI Kit handles most styling. */
+html,
+body,
+#root {
+  height: 100%;
+}

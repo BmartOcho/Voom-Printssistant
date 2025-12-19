@@ -1,0 +1,17 @@
+{
+  "name": "printssistant-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "backend",
+    "canva-app",
+    "shared"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev -w backend",
+    "dev:app": "npm run dev -w canva-app",
+    "build:shared": "npm run build -w shared",
+    "smoke": "npm run smoke -w backend"
+  }
+}

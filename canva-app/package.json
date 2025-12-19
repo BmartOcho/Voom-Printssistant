@@ -1,0 +1,26 @@
+{
+  "name": "printssistant-canva-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --port 5173"
+  },
+  "dependencies": {
+    "@canva/app-ui-kit": "^3.8.0",
+    "@canva/app-hooks": "0.0.0-beta.4",
+    "@canva/design": "^2.7.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@printssistant/shared": "*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.8"
+  }
+}
