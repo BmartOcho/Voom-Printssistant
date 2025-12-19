@@ -6,6 +6,9 @@ import { z } from "zod";
 import { JsonDb } from "./storage.js";
 import { ExportRecord, ExportPayloadSchema, ProductRule, ProductRuleSchema } from "@printssistant/shared";
 import crypto from "node:crypto";
+import fs from "node:fs";
+import { pipeline } from "node:stream/promises";
+import { fileURLToPath } from "node:url";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? "*";
@@ -13,6 +16,28 @@ const DATA_DIR = process.env.DATA_DIR ?? "./data";
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "secret123";
 
 const db = new JsonDb(DATA_DIR);
+
+// Ensure exports directory exists
+const EXPORTS_DIR = path.join(DATA_DIR, "exports");
+if (!fs.existsSync(EXPORTS_DIR)) {
+  fs.mkdirSync(EXPORTS_DIR, { recursive: true });
+}
+
+/**
+ * Download a file from a URL and save it to the exports directory.
+ * Returns the absolute path to the saved file.
+ */
+async function downloadExportFile(url: string, id: string): Promise<string> {
+  const res = await fetch(url);
+  if (!res.ok || !res.body) {
+    throw new Error(`Failed to download export: ${res.status} ${res.statusText}`);
+  }
+  const filePath = path.join(EXPORTS_DIR, `${id}.pdf`);
+  const writeStream = fs.createWriteStream(filePath);
+  // Use stream pipeline to pipe the response body to the file
+  await pipeline(res.body as any, writeStream);
+  return filePath;
+}
 
 const app = express();
 app.use(cors({ origin: CORS_ORIGIN === "*" ? true : CORS_ORIGIN }));
@@ -69,8 +94,28 @@ app.post("/api/exports", (req, res) => {
     raw: body.raw
   };
 
-  db.addExport(rec);
-  res.json({ ok: true, record: rec });
+  // Download the PDF and store it locally.
+  downloadExportFile(body.exportUrl, rec.id)
+    .then((filePath) => {
+      rec.filePath = filePath;
+      db.addExport(rec);
+      res.json({ ok: true, record: rec });
+    })
+    .catch((err) => {
+      console.error("Failed to download and store export:", err);
+      db.addExport(rec);
+      res.json({ ok: true, record: rec });
+    });
+});
+
+// Serve stored PDF exports
+app.get("/api/exports/:id/download", (req, res) => {
+  const id = req.params.id;
+  const rec = db.listExports().find((e) => e.id === id);
+  if (!rec || !rec.filePath) {
+    return res.status(404).json({ error: "Export not found or file not stored" });
+  }
+  res.sendFile(rec.filePath);
 });
 
 app.get("/api/exports", (req, res) => {

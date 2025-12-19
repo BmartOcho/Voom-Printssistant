@@ -48,6 +48,9 @@ export type ExportPayload = z.infer<typeof ExportPayloadSchema>;
 export const ExportRecordSchema = ExportPayloadSchema.extend({
   id: z.string().uuid(),
   createdAt: z.string().datetime()
+}).extend({
+  // Local file path where the exported PDF is stored (optional)
+  filePath: z.string().optional()
 });
 
 export type ExportRecord = z.infer<typeof ExportRecordSchema>;
