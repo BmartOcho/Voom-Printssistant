@@ -306,6 +306,98 @@ app.get("/admin", (req, res) => {
     `);
 });
 
+// --- Jobs Dashboard ---
+app.get("/jobs", (_req, res) => {
+  res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Jobs Dashboard</title>
+  <style>
+    body { font-family: sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { margin-bottom: 1rem; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
+    th { background: #f5f5f5; }
+    button { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
+    #jobs-table tbody tr:nth-child(even) { background: #fafafa; }
+    pre { white-space: pre-wrap; border: 1px solid #ddd; padding: 0.5rem; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Jobs Dashboard</h1>
+  <table id="jobs-table">
+    <thead>
+      <tr>
+        <th>Job ID</th>
+        <th>SKU</th>
+        <th>Quantity</th>
+        <th>Status</th>
+        <th>Exports</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td colspan="6">Loading jobs...</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Job Details</h2>
+  <pre id="job-details">(select a job to view details)</pre>
+
+  <script>
+    async function loadJobs() {
+      try {
+        const res = await fetch('/api/jobs');
+        if (!res.ok) throw new Error('Failed to fetch jobs');
+        const jobs = await res.json();
+        const tbody = document.querySelector('#jobs-table tbody');
+        tbody.innerHTML = '';
+        if (!jobs.length) {
+          tbody.innerHTML = '<tr><td colspan="6">No jobs found.</td></tr>';
+          return;
+        }
+        jobs.forEach(job => {
+          const exportsCount = job.exports ? job.exports.length : 0;
+          const tr = document.createElement('tr');
+          tr.innerHTML = \`
+            <td>\${job.id}</td>
+            <td>\${job.sku}</td>
+            <td>\${job.quantity}</td>
+            <td>\${job.status}</td>
+            <td>\${exportsCount}</td>
+            <td><button onclick="viewJob('\${job.id}')">View</button></td>
+          \`;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        document.querySelector('#jobs-table tbody').innerHTML =
+          '<tr><td colspan="6">Error loading jobs</td></tr>';
+      }
+    }
+
+    async function viewJob(jobId) {
+      try {
+        const res = await fetch('/api/jobs/' + jobId);
+        if (!res.ok) throw new Error('Failed to fetch job');
+        const job = await res.json();
+        document.querySelector('#job-details').textContent =
+          JSON.stringify(job, null, 2);
+      } catch (err) {
+        document.querySelector('#job-details').textContent =
+          'Error loading job details';
+      }
+    }
+
+    // Load jobs when the page loads
+    loadJobs();
+  </script>
+</body>
+</html>
+  `);
+});
+
 app.listen(PORT, () => {
   console.log(`[backend] listening on http://localhost:${PORT}`);
 });
