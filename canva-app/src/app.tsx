@@ -11,7 +11,7 @@ import {
 import { requestExport } from "@canva/design";
 import { useFeatureSupport } from "@canva/app-hooks";
 
-import { fetchRule, postExport, ProductRule } from "./lib/api";
+import { fetchRule, postExport, getJob, createJob, ProductRule, Job } from "./lib/api";
 import { getQueryParamOr, getQueryParam } from "./lib/query";
 
 type Readiness = {
@@ -25,20 +25,28 @@ function inches(n: number) {
 }
 
 export function App() {
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL as string;
+
   // These are passed in via your deep link (or appended by your website)
   const sku = useMemo(() => getQueryParamOr("sku", "POSTCARD_4x6"), []);
-  const jobId = useMemo(() => getQueryParam("job_id") ?? undefined, []);
+  const initialJobId = useMemo(() => getQueryParam("job_id") ?? undefined, []);
   const customerGroup = useMemo(() => getQueryParam("group") ?? "default", []);
   const returnUrl = useMemo(() => getQueryParam("return_url") ?? undefined, []);
+
+  const [currentJobId, setCurrentJobId] = useState<string | undefined>(initialJobId);
+  const [job, setJob] = useState<Job | null>(null);
+  const [jobError, setJobError] = useState<string | null>(null);
 
   const [rule, setRule] = useState<ProductRule | null>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exportUrl, setExportUrl] = useState<string | null>(null);
+  const [exportId, setExportId] = useState<string | null>(null);
 
   const isSupported = useFeatureSupport();
 
+  // Load Rules
   useEffect(() => {
     (async () => {
       try {
@@ -54,11 +62,35 @@ export function App() {
     })();
   }, [sku]);
 
+  // Load Job
+  useEffect(() => {
+    if (!currentJobId) {
+      setJob(null);
+      setJobError(null);
+      return;
+    }
+
+    // Optimization: if we already have the job data matching this ID, don't re-fetch.
+    if (job && job.id === currentJobId) {
+      return;
+    }
+
+    (async () => {
+      try {
+        setJobError(null);
+        const j = await getJob(currentJobId);
+        setJob(j);
+      } catch (e: any) {
+        setJobError(e?.message ?? "Failed to load job");
+        setJob(null);
+      }
+    })();
+  }, [currentJobId, job]);
+
   const readiness: Readiness = useMemo(() => {
     if (!rule) return { ok: false, issues: ["Rules not loaded yet"] };
 
     // Phase 1: This is intentionally conservative.
-    // Later you can use Design Editing APIs to inspect the design directly, but this starter keeps it simple.
     const issues: string[] = [];
 
     if (rule.bleedIn <= 0) issues.push("Bleed is not configured for this SKU.");
@@ -70,11 +102,30 @@ export function App() {
     return { ok: issues.length === 0, issues };
   }, [rule]);
 
+  async function handleCreateJob() {
+    try {
+      setStatus("Creating new job...");
+      setJobError(null);
+      const newJob = await createJob({ sku, quantity: 1 });
+      setJob(newJob);
+      setCurrentJobId(newJob.id);
+      setStatus("Job created.");
+    } catch (e: any) {
+      setJobError(e?.message ?? "Failed to create job");
+      setStatus(null);
+    }
+  }
+
   async function handleExport() {
     if (!rule) return;
+    if (!job) {
+      setError("No active job found. Please create or link a job first.");
+      return;
+    }
 
     setStatus(null);
     setError(null);
+    setExportId(null);
 
     // Canva recommends checking feature support before calling SDK methods.
     if (!isSupported(requestExport)) {
@@ -108,9 +159,9 @@ export function App() {
       setExportUrl(firstUrl);
       setStatus("Export completed. Logging export to your print shop backend…");
 
-      await postExport({
+      const response = await postExport({
         sku,
-        jobId,
+        jobId: job.id,
         customerGroup,
         designTitle: completed.title,
         exportUrl: firstUrl,
@@ -118,7 +169,14 @@ export function App() {
         raw: completed
       });
 
-      setStatus("Logged. You can now return to upload.");
+      setExportId(response.record.id);
+
+      setStatus("Logged.");
+
+      // Refresh job data
+      const updatedJob = await getJob(job.id);
+      setJob(updatedJob);
+
     } catch (e: any) {
       setError(e?.message ?? "Export failed");
     }
@@ -126,7 +184,7 @@ export function App() {
 
   function handleReturn() {
     if (!returnUrl) {
-      setError("No return_url provided. Add return_url to your deep link query params.");
+      setError("No return_url provided.");
       return;
     }
     window.open(returnUrl, "_top");
@@ -152,21 +210,39 @@ export function App() {
           <Title>Printssistant Prepress Helper</Title>
           <Text>
             SKU: <strong>{sku}</strong>
-            {jobId ? (
+            {currentJobId ? (
               <>
                 {" "}
-                | Job: <strong>{jobId}</strong>
+                | Job: <strong>{currentJobId}</strong>
               </>
             ) : null}
             {" "}
             | Group: <strong>{customerGroup}</strong>
           </Text>
+          <Text tone={returnUrl ? "positive" : "critical"}>
+            Return URL: {returnUrl ? "Present" : "Absent"}
+          </Text>
         </Rows>
 
         {error ? <Alert tone="critical">{error}</Alert> : null}
+        {jobError ? <Alert tone="critical">{jobError}</Alert> : null}
         {status ? <Alert tone="info">{status}</Alert> : null}
 
-
+        {/* Job Binding Section */}
+        <Rows spacing="1u">
+          <Text><strong>Job Details</strong></Text>
+          {job ? (
+             <Rows spacing="0.5u">
+                <Text>Status: {job.status}</Text>
+                <Text>Export Count: {job.exports.length}</Text>
+             </Rows>
+          ) : (
+             <Box>
+                <Text>No valid job linked.</Text>
+                <Button variant="secondary" onClick={handleCreateJob}>Create New Job</Button>
+             </Box>
+          )}
+        </Rows>
 
         <Rows spacing="1u">
           <Text>
@@ -186,8 +262,6 @@ export function App() {
           )}
         </Rows>
 
-
-
         <Rows spacing="1u">
           <Text>
             <strong>Readiness</strong>{" "}
@@ -205,8 +279,6 @@ export function App() {
           )}
         </Rows>
 
-
-
         <Rows spacing="1u">
           <Text>
             <strong>Export</strong>
@@ -216,25 +288,39 @@ export function App() {
           <Button
             variant="primary"
             onClick={handleExport}
-            disabled={!rule || !isSupported(requestExport)}
+            disabled={!rule || !job || !isSupported(requestExport)}
           >
             Export Print-Ready PDF
           </Button>
 
-          {exportUrl ? (
-            <Alert tone="positive">
-              Export URL captured (valid for a limited time). Your backend logged it.
-            </Alert>
+          {exportId ? (
+             <Box>
+                <Alert tone="positive">Export successfully captured.</Alert>
+                <Box paddingTop="1u">
+                  <a
+                    href={`${BACKEND_URL}/api/exports/${exportId}/download`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                       display: 'inline-block',
+                       padding: '8px 16px',
+                       backgroundColor: '#00c4cc',
+                       color: 'white',
+                       borderRadius: '4px',
+                       textDecoration: 'none',
+                       fontWeight: 'bold'
+                    }}
+                  >
+                    Download stored PDF
+                  </a>
+                </Box>
+             </Box>
           ) : null}
 
-          <Button variant="secondary" onClick={handleReturn} disabled={!returnUrl}>
-            Return to Upload
-          </Button>
-
-          {!returnUrl ? (
-            <Text>
-              Tip: pass <code>return_url</code> in your deep link query params so this button works.
-            </Text>
+          {returnUrl ? (
+            <Button variant="secondary" onClick={handleReturn}>
+              Return to Upload
+            </Button>
           ) : null}
         </Rows>
       </Rows>

@@ -9,12 +9,12 @@
     "preview": "vite preview --port 5173"
   },
   "dependencies": {
-    "@canva/app-ui-kit": "^3.8.0",
     "@canva/app-hooks": "0.0.0-beta.4",
+    "@canva/app-ui-kit": "^3.8.0",
     "@canva/design": "^2.7.5",
+    "@printssistant/shared": "*",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "@printssistant/shared": "*"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.5",
@@ -22,5 +22,8 @@
     "@vitejs/plugin-react": "^4.3.1",
     "typescript": "^5.6.3",
     "vite": "^5.4.8"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "^4.53.5"
   }
 }
