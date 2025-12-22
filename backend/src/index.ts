@@ -4,7 +4,14 @@ import cors from "cors";
 import path from "node:path";
 import { z } from "zod";
 import { JsonDb } from "./storage.js";
-import { ExportRecord, ExportPayloadSchema, ProductRule, ProductRuleSchema } from "@printssistant/shared";
+import {
+  ExportRecord,
+  ExportPayloadSchema,
+  ProductRule,
+  ProductRuleSchema,
+  Job,
+  JobCreateSchema
+} from "@printssistant/shared";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { pipeline } from "node:stream/promises";
@@ -99,11 +106,18 @@ app.post("/api/exports", (req, res) => {
     .then((filePath) => {
       rec.filePath = filePath;
       db.addExport(rec);
+      // If a jobId was provided, attach this export to the job
+      if (body.jobId) {
+        db.attachExportToJob(body.jobId, rec);
+      }
       res.json({ ok: true, record: rec });
     })
     .catch((err) => {
       console.error("Failed to download and store export:", err);
       db.addExport(rec);
+      if (body.jobId) {
+      db.attachExportToJob(body.jobId, rec);
+      }
       res.json({ ok: true, record: rec });
     });
 });
@@ -121,6 +135,40 @@ app.get("/api/exports/:id/download", (req, res) => {
 app.get("/api/exports", (req, res) => {
   const limit = Number(req.query.limit ?? 50);
   res.json(db.listExports(Number.isFinite(limit) ? limit : 50));
+});
+
+// --- Jobs API ---
+
+// Create a new job
+app.post("/api/jobs", (req, res) => {
+  try {
+    const data = JobCreateSchema.parse(req.body);
+    const job: Job = {
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      sku: data.sku,
+      quantity: data.quantity ?? 1,
+      status: "artwork_pending",
+      exports: []
+    };
+    db.addJob(job);
+    res.json({ ok: true, job });
+  } catch (e: any) {
+    res.status(400).json({ error: "Invalid job payload", issues: e.errors ?? e });
+  }
+});
+
+// List jobs
+app.get("/api/jobs", (req, res) => {
+  const limit = Number(req.query.limit ?? 50);
+  res.json(db.listJobs(Number.isFinite(limit) ? limit : 50));
+});
+
+// Get a specific job by ID
+app.get("/api/jobs/:jobId", (req, res) => {
+  const job = db.getJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: "Job not found" });
+  res.json(job);
 });
 
 // --- Admin API ---

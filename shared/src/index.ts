@@ -54,3 +54,34 @@ export const ExportRecordSchema = ExportPayloadSchema.extend({
 });
 
 export type ExportRecord = z.infer<typeof ExportRecordSchema>;
+
+// --- Jobs ---
+
+/**
+ * A Job represents a print order. It holds the SKU of the product being ordered,
+ * the quantity desired, a status indicating whether artwork has been attached,
+ * a list of attached export records, and timestamps. The status field can be
+ * extended in the future to include additional order states (e.g. approved,
+ * in_production), but for now we keep it simple.
+ */
+export const JobSchema = z.object({
+  id: z.string().uuid(),
+  sku: z.string(),
+  quantity: z.number().int().min(1).default(1),
+  status: z.enum(["artwork_pending", "artwork_ready"]),
+  exports: z.array(ExportRecordSchema),
+  createdAt: z.string().datetime()
+});
+
+export type Job = z.infer<typeof JobSchema>;
+
+/**
+ * When creating a job, only the SKU and an optional quantity are required.
+ * Other fields (id, createdAt, status, exports) are filled in by the backend.
+ */
+export const JobCreateSchema = z.object({
+  sku: z.string().min(1),
+  quantity: z.number().int().min(1).optional()
+});
+
+export type JobCreate = z.infer<typeof JobCreateSchema>;

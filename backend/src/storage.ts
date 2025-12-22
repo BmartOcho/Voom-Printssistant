@@ -1,11 +1,17 @@
 import fs from "node:fs";
 import path from "node:path";
-import { ExportRecord, ProductRule, TemplateMapping } from "./types.js";
+import {
+  ExportRecord,
+  ProductRule,
+  TemplateMapping,
+  Job
+} from "./types.js";
 
 type DbShape = {
   rules: ProductRule[];
   templates: TemplateMapping[];
   exports: ExportRecord[];
+  jobs: Job[];       // <-- new jobs array
 };
 
 function ensureDir(dir: string) {
@@ -48,12 +54,14 @@ export class JsonDb {
             templateName: "4x6 Postcard (Full Bleed)"
           }
         ],
-        exports: []
+        exports: [],
+        jobs: []          // <-- seed with empty jobs array
       };
       fs.writeFileSync(this.filePath, JSON.stringify(seed, null, 2), "utf-8");
     }
 
     this.data = JSON.parse(fs.readFileSync(this.filePath, "utf-8")) as DbShape;
+    if (!this.data.jobs) this.data.jobs = [];
   }
 
   private flush() {
@@ -104,5 +112,31 @@ export class JsonDb {
 
   listExports(limit = 50) {
     return this.data.exports.slice(0, limit);
+  }
+
+  // --- Jobs ---
+
+  listJobs(limit = 50) {
+    return this.data.jobs.slice(0, limit);
+  }
+
+  getJob(id: string) {
+    return this.data.jobs.find((j) => j.id === id) ?? null;
+  }
+
+  addJob(job: Job) {
+    this.data.jobs.unshift(job);
+    this.flush();
+    return job;
+  }
+
+  attachExportToJob(jobId: string, rec: ExportRecord) {
+    const job = this.data.jobs.find((j) => j.id === jobId);
+    if (job) {
+      job.exports.push(rec);
+      job.status = "artwork_ready";
+      this.flush();
+    }
+    return job;
   }
 }
