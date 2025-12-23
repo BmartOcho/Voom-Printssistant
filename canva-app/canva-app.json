@@ -11,5 +11,8 @@
       "DESIGN:CONTENT:READ",
       "PLATFORM:OPEN_EXTERNAL_URL"
     ]
+  },
+  "ui": {
+    "design_editor": "index.html"
   }
 }
