@@ -1,7 +1,15 @@
 {
   "$schema": "https://www.canva.dev/schemas/canva-app.json",
   "name": "Printssistant Prepress Helper",
+  "intent": {
+    "design_editor": {
+      "enrolled": true
+    }
+  },
   "runtime": {
-    "scopes": []
+    "scopes": [
+      "DESIGN:CONTENT:READ",
+      "PLATFORM:OPEN_EXTERNAL_URL"
+    ]
   }
 }
