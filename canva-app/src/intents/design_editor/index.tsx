@@ -1,22 +1,17 @@
-import { createRoot } from "react-dom/client";
 import { AppUiProvider } from "@canva/app-ui-kit";
+import { createRoot } from "react-dom/client";
+import React from "react";
 import { App } from "../../app";
-import type { DesignEditorIntent } from "@canva/intents/design";
 
-const designEditorIntent: DesignEditorIntent = {
+export default {
   render: async () => {
-    const rootElement = document.getElementById("root");
-    if (!rootElement) {
-      throw new Error("Unable to find element with id of 'root'");
-    }
-
-    const root = createRoot(rootElement);
+    const root = createRoot(document.getElementById("root")!);
     root.render(
-      <AppUiProvider>
-        <App />
-      </AppUiProvider>
+      <React.StrictMode>
+        <AppUiProvider>
+          <App />
+        </AppUiProvider>
+      </React.StrictMode>
     );
   },
 };
-
-export default designEditorIntent;
