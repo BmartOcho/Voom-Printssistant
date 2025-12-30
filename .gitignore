@@ -3,3 +3,8 @@ dist
 .env
 backend/data
 .DS_Store
+
+# Old Canva app (to be deleted after restart)
+canva-app/
+canva-app-backup-app.tsx
+canva-app-backup-lib/

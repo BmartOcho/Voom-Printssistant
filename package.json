@@ -5,12 +5,12 @@
   "type": "module",
   "workspaces": [
     "backend",
-    "canva-app",
+    "printssistant",
     "shared"
   ],
   "scripts": {
     "dev:backend": "npm run dev -w backend",
-    "dev:app": "npm run dev -w canva-app",
+    "dev:app": "npm start -w printssistant",
     "build:shared": "npm run build -w shared",
     "smoke": "npm run smoke -w backend"
   }
