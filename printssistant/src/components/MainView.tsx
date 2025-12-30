@@ -3,18 +3,33 @@
  * Features progressive disclosure and user-friendly language.
  */
 
-import { useMemo, useState } from 'react';
-import { Alert, Badge, Button, Columns, ProgressBar, Rows, Text } from '@canva/app-ui-kit';
-import { useIntl } from 'react-intl';
-import * as styles from 'styles/components.css';
-import type { PrintJob } from '../data/printJobs';
-import { getRequiredChecks, getOptionalChecks } from '../data/manualChecks';
-import { formatDimensions, formatProgress, dimensionsMatch } from '../lib/formatting';
-import { DPIAnalyzer } from './DPIAnalyzer';
-import { ManualCheckItem } from './ManualCheckItem';
-import { ContextualTips } from './ContextualTips';
-import { SuccessState } from './SuccessState';
-import type { ImageAnalysisState } from '../hooks/useImageAnalysis';
+import { useMemo, useState } from "react";
+import {
+  Alert,
+  Badge,
+  Button,
+  Columns,
+  ProgressBar,
+  Rows,
+  Text,
+} from "@canva/app-ui-kit";
+import { useIntl } from "react-intl";
+import * as styles from "styles/components.css";
+import type { PrintJob } from "../data/printJobs";
+import { getRequiredChecks, getOptionalChecks } from "../data/manualChecks";
+import {
+  formatDimensions,
+  formatProgress,
+  dimensionsMatch,
+} from "../lib/formatting";
+import { DPIAnalyzer } from "./DPIAnalyzer";
+import { ManualCheckItem } from "./ManualCheckItem";
+import { ContextualTips } from "./ContextualTips";
+import { SuccessState } from "./SuccessState";
+import type { ImageAnalysisState } from "../hooks/useImageAnalysis";
+
+const CHECKMARK = "\u2713";
+const SPACE = " ";
 
 interface MainViewProps {
   job: PrintJob;
@@ -40,7 +55,7 @@ export function MainView({
   const intl = useIntl();
   const requiredChecks = getRequiredChecks();
   const optionalChecks = getOptionalChecks();
-  
+
   // State for progressive disclosure
   const [showOptionalChecks, setShowOptionalChecks] = useState(false);
 
@@ -57,13 +72,13 @@ export function MainView({
     designWidthIn,
     designHeightIn,
     job.widthIn,
-    job.heightIn
+    job.heightIn,
   );
   const sizeMatchesRotated = dimensionsMatch(
     designWidthIn,
     designHeightIn,
     job.heightIn,
-    job.widthIn
+    job.widthIn,
   );
   const hasProperSize = sizeMatches || sizeMatchesRotated;
 
@@ -71,10 +86,10 @@ export function MainView({
   if (allRequiredComplete) {
     return (
       <div className={styles.scrollContainer}>
-        <SuccessState 
-          job={job} 
+        <SuccessState
+          job={job}
           completedChecks={completedChecks}
-          onStartOver={onStartOver} 
+          onStartOver={onStartOver}
         />
       </div>
     );
@@ -87,14 +102,14 @@ export function MainView({
         <Columns spacing="1u" alignY="center">
           <Button variant="tertiary" onClick={onChangeJob}>
             {intl.formatMessage({
-              defaultMessage: '← Change',
-              description: 'Change job button',
+              defaultMessage: "← Change",
+              description: "Change job button",
             })}
           </Button>
           <Badge
             ariaLabel={intl.formatMessage({
-              defaultMessage: 'Selected job',
-              description: 'Job badge label',
+              defaultMessage: "Selected job",
+              description: "Job badge label",
             })}
             tone="info"
             text={job.name}
@@ -108,8 +123,8 @@ export function MainView({
               <Text size="small">
                 <strong>
                   {intl.formatMessage({
-                    defaultMessage: 'Design size may need adjustment',
-                    description: 'Size mismatch title',
+                    defaultMessage: "Design size may need adjustment",
+                    description: "Size mismatch title",
                   })}
                 </strong>
               </Text>
@@ -117,34 +132,39 @@ export function MainView({
                 {intl.formatMessage(
                   {
                     defaultMessage:
-                      'Your design is {designSize}, but {jobName} requires {jobSize}. The print may be scaled or cropped.',
-                    description: 'Size mismatch explanation',
+                      "Your design is {designSize}, but {jobName} requires {jobSize}. The print may be scaled or cropped.",
+                    description: "Size mismatch explanation",
                   },
                   {
                     designSize: formatDimensions(designWidthIn, designHeightIn),
                     jobName: job.name,
                     jobSize: formatDimensions(job.widthIn, job.heightIn),
-                  }
+                  },
                 )}
               </Text>
               <Button variant="tertiary" onClick={onChangeJob}>
                 {intl.formatMessage({
-                  defaultMessage: 'Choose a different size',
-                  description: 'Change size suggestion',
+                  defaultMessage: "Choose a different size",
+                  description: "Change size suggestion",
                 })}
               </Button>
             </Rows>
           </Alert>
         )}
 
+
         {/* Size match confirmation */}
         {hasProperSize && (
           <Alert tone="positive">
             <Text size="small">
-              {`✓ ${intl.formatMessage({
-                defaultMessage: 'Design size matches',
-                description: 'Size match confirmation',
-              })} ${formatDimensions(job.widthIn, job.heightIn)}`}
+              <span aria-hidden="true">{CHECKMARK}</span>
+              {SPACE}
+              {intl.formatMessage({
+                defaultMessage: "Design size matches",
+                description: "Size match confirmation",
+              })}
+              {SPACE}
+              {formatDimensions(job.widthIn, job.heightIn)}
             </Text>
           </Alert>
         )}
@@ -154,19 +174,28 @@ export function MainView({
           <Columns spacing="1u" alignY="center">
             <Text size="small">
               {intl.formatMessage({
-                defaultMessage: 'Getting Print Ready',
-                description: 'Progress heading',
+                defaultMessage: "Getting Print Ready",
+                description: "Progress heading",
               })}
             </Text>
             <Text size="small" tone="tertiary">
-              {`${requiredCompleted}/${requiredChecks.length}`}
+              {intl.formatMessage(
+                {
+                  defaultMessage: "{completed}/{total}",
+                  description: "Progress count",
+                },
+                {
+                  completed: requiredCompleted,
+                  total: requiredChecks.length,
+                },
+              )}
             </Text>
           </Columns>
           <ProgressBar
             value={progress}
             ariaLabel={intl.formatMessage({
-              defaultMessage: 'Print preparation progress',
-              description: 'Progress bar label',
+              defaultMessage: "Print preparation progress",
+              description: "Progress bar label",
             })}
           />
         </Rows>
@@ -179,15 +208,16 @@ export function MainView({
           <Text>
             <strong>
               {intl.formatMessage({
-                defaultMessage: 'Quick Checks',
-                description: 'Required checks heading - friendly',
+                defaultMessage: "Quick Checks",
+                description: "Required checks heading - friendly",
               })}
             </strong>
           </Text>
           <Text size="small" tone="tertiary">
             {intl.formatMessage({
-              defaultMessage: 'Complete these to ensure your design prints correctly.',
-              description: 'Required checks description',
+              defaultMessage:
+                "Complete these to ensure your design prints correctly.",
+              description: "Required checks description",
             })}
           </Text>
           {requiredChecks.map((check) => (
@@ -202,30 +232,31 @@ export function MainView({
 
         {/* Optional checks - collapsed by default */}
         <Rows spacing="1u">
-          <Button 
-            variant="tertiary" 
+          <Button
+            variant="tertiary"
             onClick={() => setShowOptionalChecks(!showOptionalChecks)}
           >
             {showOptionalChecks
               ? intl.formatMessage({
-                  defaultMessage: '▼ Hide recommended checks',
-                  description: 'Collapse optional checks',
+                  defaultMessage: "Hide recommended checks",
+                  description: "Collapse optional checks",
                 })
               : intl.formatMessage(
                   {
-                    defaultMessage: '▶ Recommended checks ({count})',
-                    description: 'Expand optional checks',
+                    defaultMessage: "Show recommended checks ({count})",
+                    description: "Expand optional checks",
                   },
-                  { count: optionalChecks.length }
+                  { count: optionalChecks.length },
                 )}
           </Button>
-          
+
           {showOptionalChecks && (
             <Rows spacing="1u">
               <Text size="small" tone="tertiary">
                 {intl.formatMessage({
-                  defaultMessage: 'These are optional but help ensure the best results.',
-                  description: 'Optional checks description',
+                  defaultMessage:
+                    "These are optional but help ensure the best results.",
+                  description: "Optional checks description",
                 })}
               </Text>
               {optionalChecks.map((check) => (

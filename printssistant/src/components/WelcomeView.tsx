@@ -2,9 +2,13 @@
  * Welcome view with branding and call-to-action.
  */
 
-import { Button, Rows, Text, Title } from '@canva/app-ui-kit';
-import { FormattedMessage, useIntl } from 'react-intl';
-import * as styles from 'styles/components.css';
+import { Button, Rows, Text, Title } from "@canva/app-ui-kit";
+import { useIntl } from "react-intl";
+import * as styles from "styles/components.css";
+
+const PRINTER_EMOJI = "\uD83D\uDDA8\uFE0F";
+const CHECKMARK_EMOJI = "\u2713";
+const SPACE = " ";
 
 interface WelcomeViewProps {
   onGetStarted: () => void;
@@ -17,56 +21,88 @@ export function WelcomeView({ onGetStarted }: WelcomeViewProps) {
     <div className={styles.scrollContainer}>
       <Rows spacing="3u" align="center">
         {/* Branding */}
-        <div style={{ fontSize: '48px', textAlign: 'center' }}>
-          <span role="img" aria-hidden="true">🖨️</span>
+        <div style={{ fontSize: "48px", textAlign: "center" }}>
+          <span role="img" aria-hidden="true">
+            {intl.formatMessage(
+              {
+                defaultMessage: "{emoji}\u200B",
+                description: "Printer emoji",
+              },
+              { emoji: PRINTER_EMOJI },
+            )}
+          </span>
         </div>
 
         <Title size="large" alignment="center">
           {intl.formatMessage({
-            defaultMessage: 'Printssistant',
-            description: 'App name displayed on welcome screen',
+            defaultMessage: "Printssistant",
+            description: "App name displayed on welcome screen",
           })}
         </Title>
 
         <Text alignment="center" tone="tertiary">
           {intl.formatMessage({
-            defaultMessage: 'Expert prepress prep in Canva',
-            description: 'App tagline on welcome screen',
+            defaultMessage: "Expert prepress prep in Canva",
+            description: "App tagline on welcome screen",
           })}
         </Text>
 
         <Text alignment="center">
           {intl.formatMessage({
             defaultMessage:
-              'Get your designs print-ready with automatic DPI analysis, bleed checks, and professional preflight verification.',
-            description: 'App description on welcome screen',
+              "Get your designs print-ready with automatic DPI analysis, bleed checks, and professional preflight verification.",
+            description: "App description on welcome screen",
           })}
         </Text>
 
         {/* Features list */}
         <Rows spacing="1u">
           <Text size="small">
-            <span role="img" aria-hidden="true">✓</span>
-            {' '}
+            <span role="img" aria-hidden="true">
+              {intl.formatMessage(
+                {
+                  defaultMessage: "{emoji}\u200B",
+                  description: "Checkmark",
+                },
+                { emoji: CHECKMARK_EMOJI },
+              )}
+            </span>
+            {SPACE}
             {intl.formatMessage({
-              defaultMessage: 'Automatic resolution analysis',
-              description: 'Feature item',
+              defaultMessage: "Automatic resolution analysis",
+              description: "Feature item",
             })}
           </Text>
           <Text size="small">
-            <span role="img" aria-hidden="true">✓</span>
-            {' '}
+            <span role="img" aria-hidden="true">
+              {intl.formatMessage(
+                {
+                  defaultMessage: "{emoji}\u200B",
+                  description: "Checkmark",
+                },
+                { emoji: CHECKMARK_EMOJI },
+              )}
+            </span>
+            {SPACE}
             {intl.formatMessage({
-              defaultMessage: 'Bleed and safe zone verification',
-              description: 'Feature item',
+              defaultMessage: "Bleed and safe zone verification",
+              description: "Feature item",
             })}
           </Text>
           <Text size="small">
-            <span role="img" aria-hidden="true">✓</span>
-            {' '}
+            <span role="img" aria-hidden="true">
+              {intl.formatMessage(
+                {
+                  defaultMessage: "{emoji}\u200B",
+                  description: "Checkmark",
+                },
+                { emoji: CHECKMARK_EMOJI },
+              )}
+            </span>
+            {SPACE}
             {intl.formatMessage({
-              defaultMessage: 'Print-specific tips and guidance',
-              description: 'Feature item',
+              defaultMessage: "Print-specific tips and guidance",
+              description: "Feature item",
             })}
           </Text>
         </Rows>
@@ -74,8 +110,8 @@ export function WelcomeView({ onGetStarted }: WelcomeViewProps) {
         {/* Call to action */}
         <Button variant="primary" onClick={onGetStarted} stretch>
           {intl.formatMessage({
-            defaultMessage: 'Get Started',
-            description: 'Button to start print preparation',
+            defaultMessage: "Get Started",
+            description: "Button to start print preparation",
           })}
         </Button>
       </Rows>

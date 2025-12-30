@@ -1,39 +1,39 @@
 /**
  * Printssistant - Prepress Assistant for Canva
- * 
+ *
  * Multi-view application that guides users through print preparation:
  * - Welcome: Branding and introduction
  * - Job Select: Choose print job type with size matching
  * - Main: Preflight checks, DPI analysis, and tips
  */
 
-import { useCallback, useState } from 'react';
-import { FormattedMessage } from 'react-intl';
-import { Alert, Rows, Text } from '@canva/app-ui-kit';
-import * as styles from 'styles/components.css';
+import { useCallback, useState } from "react";
+import { FormattedMessage } from "react-intl";
+import { Alert, Rows, Text } from "@canva/app-ui-kit";
+import * as styles from "styles/components.css";
 
 // Components
-import { WelcomeView } from '../../components/WelcomeView';
-import { JobSelector } from '../../components/JobSelector';
-import { MainView } from '../../components/MainView';
+import { WelcomeView } from "../../components/WelcomeView";
+import { JobSelector } from "../../components/JobSelector";
+import { MainView } from "../../components/MainView";
 
 // Data
-import { PrintJob } from '../../data/printJobs';
+import type { PrintJob } from "../../data/printJobs";
 
 // Hooks
-import { usePageContext } from '../../hooks/usePageContext';
-import { useImageAnalysis } from '../../hooks/useImageAnalysis';
+import { usePageContext } from "../../hooks/usePageContext";
+import { useImageAnalysis } from "../../hooks/useImageAnalysis";
 
 // Types
-type AppView = 'welcome' | 'job-select' | 'main';
+type AppView = "welcome" | "job-select" | "main";
 
 export const App = () => {
   // View navigation state
-  const [view, setView] = useState<AppView>('welcome');
-  
+  const [view, setView] = useState<AppView>("welcome");
+
   // Selected print job
   const [selectedJob, setSelectedJob] = useState<PrintJob | null>(null);
-  
+
   // Completed check IDs
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
 
@@ -45,27 +45,30 @@ export const App = () => {
 
   // Navigation handlers
   const handleGetStarted = useCallback(() => {
-    setView('job-select');
+    setView("job-select");
     pageContext.refresh(); // Refresh dimensions when entering job select
   }, [pageContext]);
 
-  const handleSelectJob = useCallback((job: PrintJob) => {
-    setSelectedJob(job);
-    setView('main');
-    imageAnalysis.clear(); // Clear any previous analysis
-  }, [imageAnalysis]);
+  const handleSelectJob = useCallback(
+    (job: PrintJob) => {
+      setSelectedJob(job);
+      setView("main");
+      imageAnalysis.clear(); // Clear any previous analysis
+    },
+    [imageAnalysis],
+  );
 
   const handleBack = useCallback(() => {
-    setView('welcome');
+    setView("welcome");
   }, []);
 
   const handleChangeJob = useCallback(() => {
-    setView('job-select');
+    setView("job-select");
     pageContext.refresh();
   }, [pageContext]);
 
   const handleStartOver = useCallback(() => {
-    setView('welcome');
+    setView("welcome");
     setSelectedJob(null);
     setCompletedChecks([]);
     imageAnalysis.clear();
@@ -83,10 +86,10 @@ export const App = () => {
 
   // Render appropriate view
   switch (view) {
-    case 'welcome':
+    case "welcome":
       return <WelcomeView onGetStarted={handleGetStarted} />;
 
-    case 'job-select':
+    case "job-select":
       return (
         <JobSelector
           designWidthIn={pageContext.widthIn}
@@ -98,7 +101,7 @@ export const App = () => {
         />
       );
 
-    case 'main':
+    case "main":
       if (!selectedJob) {
         // Safety fallback - shouldn't happen
         return (

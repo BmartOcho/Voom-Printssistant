@@ -11,7 +11,7 @@ export function formatInches(n: number): string {
     return `${n}"`;
   }
   // Round to 3 decimal places for display
-  return `${n.toFixed(3).replace(/\.?0+$/, '')}"`;
+  return `${n.toFixed(3).replace(/\.?0+$/, "")}"`;
 }
 
 /**
@@ -30,17 +30,17 @@ export function calculateDPI(pixelWidth: number, targetInches: number): number {
 }
 
 /**
- * Convert points to inches. Canva uses 72 points per inch.
+ * Convert CSS pixels to inches. Canva returns dimensions in CSS pixels at 96 DPI.
  */
-export function pointsToInches(points: number): number {
-  return points / 72;
+export function pixelsToInches(pixels: number): number {
+  return pixels / 96;
 }
 
 /**
- * Convert inches to points.
+ * Convert inches to CSS pixels (96 DPI).
  */
-export function inchesToPoints(inches: number): number {
-  return inches * 72;
+export function inchesToPixels(inches: number): number {
+  return inches * 96;
 }
 
 /**
@@ -52,7 +52,7 @@ export function dimensionsMatch(
   heightIn1: number,
   widthIn2: number,
   heightIn2: number,
-  toleranceIn: number = 0.1
+  toleranceIn = 0.1,
 ): boolean {
   const widthMatch = Math.abs(widthIn1 - widthIn2) <= toleranceIn;
   const heightMatch = Math.abs(heightIn1 - heightIn2) <= toleranceIn;

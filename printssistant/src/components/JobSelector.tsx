@@ -2,12 +2,19 @@
  * Job selector view showing print job presets and current design size.
  */
 
-import { Alert, Badge, Button, Columns, Rows, Text, Title } from '@canva/app-ui-kit';
-import { useIntl } from 'react-intl';
-import * as styles from 'styles/components.css';
-import type { PrintJob } from '../data/printJobs';
-import { getJobsByCategory, getCategoryLabel } from '../data/printJobs';
-import { formatDimensions, dimensionsMatch } from '../lib/formatting';
+import {
+  Alert,
+  Button,
+  Columns,
+  Rows,
+  Text,
+  Title,
+} from "@canva/app-ui-kit";
+import { useIntl } from "react-intl";
+import * as styles from "styles/components.css";
+import type { PrintJob } from "../data/printJobs";
+import { getJobsByCategory, getCategoryLabel } from "../data/printJobs";
+import { formatDimensions, dimensionsMatch } from "../lib/formatting";
 
 interface JobSelectorProps {
   designWidthIn: number;
@@ -30,16 +37,22 @@ export function JobSelector({
   const jobsByCategory = getJobsByCategory();
 
   // Check for size match with each job
-  const getSizeMatchStatus = (job: PrintJob): 'match' | 'rotated' | 'mismatch' => {
+  const getSizeMatchStatus = (
+    job: PrintJob,
+  ): "match" | "rotated" | "mismatch" => {
     // Check normal orientation
-    if (dimensionsMatch(designWidthIn, designHeightIn, job.widthIn, job.heightIn)) {
-      return 'match';
+    if (
+      dimensionsMatch(designWidthIn, designHeightIn, job.widthIn, job.heightIn)
+    ) {
+      return "match";
     }
     // Check rotated orientation
-    if (dimensionsMatch(designWidthIn, designHeightIn, job.heightIn, job.widthIn)) {
-      return 'rotated';
+    if (
+      dimensionsMatch(designWidthIn, designHeightIn, job.heightIn, job.widthIn)
+    ) {
+      return "rotated";
     }
-    return 'mismatch';
+    return "mismatch";
   };
 
   return (
@@ -49,14 +62,14 @@ export function JobSelector({
         <Columns spacing="1u" alignY="center">
           <Button variant="tertiary" onClick={onBack}>
             {intl.formatMessage({
-              defaultMessage: '← Back',
-              description: 'Back button',
+              defaultMessage: "← Back",
+              description: "Back button",
             })}
           </Button>
           <Title size="medium">
             {intl.formatMessage({
-              defaultMessage: 'Select Print Job',
-              description: 'Job selector title',
+              defaultMessage: "Select Print Job",
+              description: "Job selector title",
             })}
           </Title>
         </Columns>
@@ -67,16 +80,16 @@ export function JobSelector({
             <Text size="small">
               <strong>
                 {intl.formatMessage({
-                  defaultMessage: 'Current Design Size:',
-                  description: 'Design size label',
+                  defaultMessage: "Current Design Size:",
+                  description: "Design size label",
                 })}
               </strong>
             </Text>
             {loading ? (
               <Text>
                 {intl.formatMessage({
-                  defaultMessage: 'Loading...',
-                  description: 'Loading state',
+                  defaultMessage: "Loading...",
+                  description: "Loading state",
                 })}
               </Text>
             ) : (
@@ -84,8 +97,8 @@ export function JobSelector({
                 <Text>{formatDimensions(designWidthIn, designHeightIn)}</Text>
                 <Button variant="tertiary" onClick={onRefresh}>
                   {intl.formatMessage({
-                    defaultMessage: '↻ Refresh',
-                    description: 'Refresh dimensions button',
+                    defaultMessage: "↻ Refresh",
+                    description: "Refresh dimensions button",
                   })}
                 </Button>
               </Columns>
@@ -102,18 +115,32 @@ export function JobSelector({
 
             {jobs.map((job) => {
               const matchStatus = getSizeMatchStatus(job);
-              const isMatch = matchStatus === 'match' || matchStatus === 'rotated';
+              const isMatch =
+                matchStatus === "match" || matchStatus === "rotated";
 
               return (
                 <Button
                   key={job.id}
-                  variant={isMatch ? 'primary' : 'secondary'}
+                  variant={isMatch ? "primary" : "secondary"}
                   onClick={() => onSelectJob(job)}
                   stretch
                 >
-                  {`${job.name} – ${formatDimensions(job.widthIn, job.heightIn)}`}
-                  {matchStatus === 'match' && ' ✓'}
-                  {matchStatus === 'rotated' && ' ↻'}
+                  {intl.formatMessage(
+                    {
+                      defaultMessage: "{name} – {dimensions}{status}",
+                      description: "Job selector item label",
+                    },
+                    {
+                      name: job.name,
+                      dimensions: formatDimensions(job.widthIn, job.heightIn),
+                      status:
+                        matchStatus === "match"
+                          ? " ✓"
+                          : matchStatus === "rotated"
+                            ? " ↻"
+                            : "",
+                    },
+                  )}
                 </Button>
               );
             })}
@@ -126,7 +153,7 @@ export function JobSelector({
             {intl.formatMessage({
               defaultMessage:
                 "If your design size doesn't match a preset, your print may be cropped or scaled. Consider resizing your design first.",
-              description: 'Size mismatch warning',
+              description: "Size mismatch warning",
             })}
           </Text>
         </Alert>

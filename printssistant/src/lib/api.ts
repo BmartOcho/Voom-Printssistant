@@ -4,9 +4,8 @@
  */
 
 // Backend host from environment variable
-const BACKEND_HOST = typeof process !== 'undefined' 
-  ? (process.env.CANVA_BACKEND_HOST || '')
-  : '';
+const BACKEND_HOST =
+  typeof process !== "undefined" ? process.env.CANVA_BACKEND_HOST || "" : "";
 
 /**
  * Check if backend is available.
@@ -27,8 +26,8 @@ export interface ProductRule {
   allowMultiPage: boolean;
   notes?: string;
   export: {
-    acceptedFileTypes: Array<'pdf_standard' | 'png' | 'jpg'>;
-    recommended: 'pdf_standard';
+    acceptedFileTypes: ("pdf_standard" | "png" | "jpg")[];
+    recommended: "pdf_standard";
     instructions: string;
   };
 }
@@ -40,7 +39,7 @@ export interface Job {
   id: string;
   sku: string;
   quantity: number;
-  status: 'artwork_pending' | 'artwork_ready';
+  status: "artwork_pending" | "artwork_ready";
   exports: ExportRecord[];
   createdAt: string;
 }
@@ -81,21 +80,21 @@ export interface ExportPayload {
  */
 export async function fetchRule(sku: string): Promise<ProductRule | null> {
   if (!isBackendEnabled()) {
-    console.log('[API] Backend not configured, skipping fetchRule');
+    // console.log("[API] Backend not configured, skipping fetchRule");
     return null;
   }
 
   try {
     const res = await fetch(
-      `${BACKEND_HOST}/api/rules?sku=${encodeURIComponent(sku)}`
+      `${BACKEND_HOST}/api/rules?sku=${encodeURIComponent(sku)}`,
     );
     if (!res.ok) {
-      console.warn(`[API] Failed to fetch rules for ${sku}: ${res.status}`);
+      // console.warn(`[API] Failed to fetch rules for ${sku}: ${res.status}`);
       return null;
     }
     return await res.json();
-  } catch (error) {
-    console.error('[API] fetchRule error:', error);
+  } catch {
+    // console.error("[API] fetchRule error:", error);
     return null;
   }
 }
@@ -106,24 +105,24 @@ export async function fetchRule(sku: string): Promise<ProductRule | null> {
  */
 export async function getJob(id: string): Promise<Job | null> {
   if (!isBackendEnabled()) {
-    console.log('[API] Backend not configured, skipping getJob');
+    // console.log("[API] Backend not configured, skipping getJob");
     return null;
   }
 
   try {
     const res = await fetch(
-      `${BACKEND_HOST}/api/jobs/${encodeURIComponent(id)}`
+      `${BACKEND_HOST}/api/jobs/${encodeURIComponent(id)}`,
     );
     if (!res.ok) {
       if (res.status === 404) {
-        console.warn(`[API] Job ${id} not found`);
+        // console.warn(`[API] Job ${id} not found`);
         return null;
       }
       throw new Error(`Failed to fetch job ${id}`);
     }
     return await res.json();
-  } catch (error) {
-    console.error('[API] getJob error:', error);
+  } catch {
+    // console.error("[API] getJob error:", error);
     return null;
   }
 }
@@ -134,17 +133,17 @@ export async function getJob(id: string): Promise<Job | null> {
  */
 export async function createJob(
   sku: string,
-  quantity: number = 1
+  quantity = 1,
 ): Promise<Job | null> {
   if (!isBackendEnabled()) {
-    console.log('[API] Backend not configured, skipping createJob');
+    // console.log("[API] Backend not configured, skipping createJob");
     return null;
   }
 
   try {
     const res = await fetch(`${BACKEND_HOST}/api/jobs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sku, quantity }),
     });
     if (!res.ok) {
@@ -153,8 +152,8 @@ export async function createJob(
     }
     const json = await res.json();
     return json.job || json;
-  } catch (error) {
-    console.error('[API] createJob error:', error);
+  } catch {
+    // console.error("[API] createJob error:", error);
     return null;
   }
 }
@@ -164,17 +163,17 @@ export async function createJob(
  * Returns null if backend is unavailable.
  */
 export async function postExport(
-  payload: ExportPayload
+  payload: ExportPayload,
 ): Promise<{ ok: boolean; record: ExportRecord } | null> {
   if (!isBackendEnabled()) {
-    console.log('[API] Backend not configured, skipping postExport');
+    // console.log("[API] Backend not configured, skipping postExport");
     return null;
   }
 
   try {
     const res = await fetch(`${BACKEND_HOST}/api/exports`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
@@ -182,8 +181,8 @@ export async function postExport(
       throw new Error(`Export POST failed: ${txt}`);
     }
     return await res.json();
-  } catch (error) {
-    console.error('[API] postExport error:', error);
+  } catch {
+    // console.error("[API] postExport error:", error);
     return null;
   }
 }

@@ -1,11 +1,11 @@
 /**
  * Hook to get current page context from Canva design.
- * Converts points to inches (72 points = 1 inch).
+ * Converts CSS pixels to inches (Canva uses 96 CSS pixels per inch).
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import { getCurrentPageContext } from '@canva/design';
-import { pointsToInches } from '../lib/formatting';
+import { useCallback, useEffect, useState } from "react";
+import { getCurrentPageContext } from "@canva/design";
+import { pixelsToInches } from "../lib/formatting";
 
 export interface PageContextResult {
   widthIn: number;
@@ -27,18 +27,18 @@ export function usePageContext(): PageContextResult {
 
     try {
       const context = await getCurrentPageContext();
-      
+
       if (context && context.dimensions) {
-        // Canva returns dimensions in points (72 points = 1 inch)
+        // Canva returns dimensions in CSS pixels (96 pixels = 1 inch)
         const { width, height } = context.dimensions;
-        setWidthIn(pointsToInches(width));
-        setHeightIn(pointsToInches(height));
+        setWidthIn(pixelsToInches(width));
+        setHeightIn(pixelsToInches(height));
       } else {
-        setError('Unable to get page dimensions');
+        setError("Unable to get page dimensions");
       }
-    } catch (err) {
-      console.error('[usePageContext] Error:', err);
-      setError('Failed to load page context');
+    } catch {
+      // Logging removed for linting
+      setError("Failed to load page context");
     } finally {
       setLoading(false);
     }
