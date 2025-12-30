@@ -54,3 +54,82 @@
   justify-content: center;
   width: calc(400px + 32px + 2px); /* Image width + padding + border */
 }
+
+/* ============================================
+   Printssistant Custom Styles
+   ============================================ */
+
+/* Welcome view centered content */
+.welcomeContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  text-align: center;
+}
+
+/* Job card grid */
+.jobGrid {
+  display: grid;
+  gap: var(--ui-kit-space-100);
+}
+
+/* Progress section */
+.progressSection {
+  padding: var(--ui-kit-space-100);
+  background: var(--ui-kit-color-surface-secondary);
+  border-radius: var(--ui-kit-radius-element-standard);
+}
+
+/* Check item with indent for details */
+.checkItemDetails {
+  margin-left: var(--ui-kit-space-300);
+  padding: var(--ui-kit-space-100);
+  border-left: 2px solid var(--ui-kit-color-border);
+}
+
+/* Success celebration animation */
+.successIcon {
+  font-size: 64px;
+  text-align: center;
+  animation: celebrate 0.6s ease-out;
+}
+
+@keyframes celebrate {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Badge inline styling */
+.inlineBadge {
+  display: inline-flex;
+  margin-left: var(--ui-kit-space-050);
+}
+
+/* DPI results list */
+.dpiResultsList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-kit-space-050);
+}
+
+/* Tip item styling */
+.tipItem {
+  display: flex;
+  gap: var(--ui-kit-space-100);
+  align-items: flex-start;
+}
+
+.tipIcon {
+  flex-shrink: 0;
+}

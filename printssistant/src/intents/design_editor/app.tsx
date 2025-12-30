@@ -1,86 +1,136 @@
-import { useFeatureSupport } from "@canva/app-hooks";
-import { Button, Rows, Text } from "@canva/app-ui-kit";
-import { addElementAtCursor, addElementAtPoint } from "@canva/design";
-import { requestOpenExternalUrl } from "@canva/platform";
-import { FormattedMessage, useIntl } from "react-intl";
-import * as styles from "styles/components.css";
+/**
+ * Printssistant - Prepress Assistant for Canva
+ * 
+ * Multi-view application that guides users through print preparation:
+ * - Welcome: Branding and introduction
+ * - Job Select: Choose print job type with size matching
+ * - Main: Preflight checks, DPI analysis, and tips
+ */
 
-export const DOCS_URL = "https://www.canva.dev/docs/apps/";
+import { useCallback, useState } from 'react';
+import { FormattedMessage } from 'react-intl';
+import { Alert, Rows, Text } from '@canva/app-ui-kit';
+import * as styles from 'styles/components.css';
+
+// Components
+import { WelcomeView } from '../../components/WelcomeView';
+import { JobSelector } from '../../components/JobSelector';
+import { MainView } from '../../components/MainView';
+
+// Data
+import { PrintJob } from '../../data/printJobs';
+
+// Hooks
+import { usePageContext } from '../../hooks/usePageContext';
+import { useImageAnalysis } from '../../hooks/useImageAnalysis';
+
+// Types
+type AppView = 'welcome' | 'job-select' | 'main';
 
 export const App = () => {
-  const isSupported = useFeatureSupport();
-  const addElement = [addElementAtPoint, addElementAtCursor].find((fn) =>
-    isSupported(fn),
-  );
+  // View navigation state
+  const [view, setView] = useState<AppView>('welcome');
+  
+  // Selected print job
+  const [selectedJob, setSelectedJob] = useState<PrintJob | null>(null);
+  
+  // Completed check IDs
+  const [completedChecks, setCompletedChecks] = useState<string[]>([]);
 
-  const onClick = () => {
-    if (!addElement) {
-      return;
-    }
+  // Get page context (design dimensions)
+  const pageContext = usePageContext();
 
-    addElement({
-      type: "text",
-      children: ["Hello world!"],
+  // Image analysis hook
+  const imageAnalysis = useImageAnalysis();
+
+  // Navigation handlers
+  const handleGetStarted = useCallback(() => {
+    setView('job-select');
+    pageContext.refresh(); // Refresh dimensions when entering job select
+  }, [pageContext]);
+
+  const handleSelectJob = useCallback((job: PrintJob) => {
+    setSelectedJob(job);
+    setView('main');
+    imageAnalysis.clear(); // Clear any previous analysis
+  }, [imageAnalysis]);
+
+  const handleBack = useCallback(() => {
+    setView('welcome');
+  }, []);
+
+  const handleChangeJob = useCallback(() => {
+    setView('job-select');
+    pageContext.refresh();
+  }, [pageContext]);
+
+  const handleStartOver = useCallback(() => {
+    setView('welcome');
+    setSelectedJob(null);
+    setCompletedChecks([]);
+    imageAnalysis.clear();
+  }, [imageAnalysis]);
+
+  // Toggle check completion
+  const handleToggleCheck = useCallback((id: string) => {
+    setCompletedChecks((prev) => {
+      if (prev.includes(id)) {
+        return prev.filter((checkId) => checkId !== id);
+      }
+      return [...prev, id];
     });
-  };
+  }, []);
 
-  const openExternalUrl = async (url: string) => {
-    const response = await requestOpenExternalUrl({
-      url,
-    });
+  // Render appropriate view
+  switch (view) {
+    case 'welcome':
+      return <WelcomeView onGetStarted={handleGetStarted} />;
 
-    if (response.status === "aborted") {
-      // user decided not to navigate to the link
-    }
-  };
+    case 'job-select':
+      return (
+        <JobSelector
+          designWidthIn={pageContext.widthIn}
+          designHeightIn={pageContext.heightIn}
+          loading={pageContext.loading}
+          onSelectJob={handleSelectJob}
+          onBack={handleBack}
+          onRefresh={pageContext.refresh}
+        />
+      );
 
-  const intl = useIntl();
+    case 'main':
+      if (!selectedJob) {
+        // Safety fallback - shouldn't happen
+        return (
+          <div className={styles.scrollContainer}>
+            <Rows spacing="2u">
+              <Alert tone="critical">
+                <Text>
+                  <FormattedMessage
+                    defaultMessage="No job selected. Please go back and select a job."
+                    description="Error when no job is selected"
+                  />
+                </Text>
+              </Alert>
+            </Rows>
+          </div>
+        );
+      }
 
-  return (
-    <div className={styles.scrollContainer}>
-      <Rows spacing="2u">
-        <Text>
-          <FormattedMessage
-            defaultMessage="
-              To make changes to this app, edit the <code>src/app.tsx</code> file,
-              then close and reopen the app in the editor to preview the changes.
-            "
-            description="Instructions for how to make changes to the app. Do not translate <code>src/app.tsx</code>."
-            values={{
-              code: (chunks) => <code>{chunks}</code>,
-            }}
-          />
-        </Text>
-        <Button
-          variant="primary"
-          onClick={onClick}
-          disabled={!addElement}
-          tooltipLabel={
-            !addElement
-              ? intl.formatMessage({
-                  defaultMessage:
-                    "This feature is not supported in the current page",
-                  description:
-                    "Tooltip label for when a feature is not supported in the current design",
-                })
-              : undefined
-          }
-          stretch
-        >
-          {intl.formatMessage({
-            defaultMessage: "Do something cool",
-            description:
-              "Button text to do something cool. Creates a new text element when pressed.",
-          })}
-        </Button>
-        <Button variant="secondary" onClick={() => openExternalUrl(DOCS_URL)}>
-          {intl.formatMessage({
-            defaultMessage: "Open Canva Apps SDK docs",
-            description:
-              "Button text to open Canva Apps SDK docs. Opens an external URL when pressed.",
-          })}
-        </Button>
-      </Rows>
-    </div>
-  );
+      return (
+        <MainView
+          job={selectedJob}
+          designWidthIn={pageContext.widthIn}
+          designHeightIn={pageContext.heightIn}
+          completedChecks={completedChecks}
+          onToggleCheck={handleToggleCheck}
+          onChangeJob={handleChangeJob}
+          onStartOver={handleStartOver}
+          imageAnalysis={imageAnalysis}
+        />
+      );
+
+    default:
+      return <WelcomeView onGetStarted={handleGetStarted} />;
+  }
 };
