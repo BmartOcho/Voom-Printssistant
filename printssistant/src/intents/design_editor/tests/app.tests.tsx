@@ -2,7 +2,8 @@
 import { useFeatureSupport } from '@canva/app-hooks';
 import { TestAppI18nProvider } from '@canva/app-i18n-kit';
 import { TestAppUiProvider } from '@canva/app-ui-kit';
-import { getCurrentPageContext } from '@canva/design';
+import { getCurrentPageContext, requestExport } from '@canva/design';
+import { requestOpenExternalUrl } from '@canva/platform';
 import { fireEvent, render, waitFor } from '@testing-library/react';
 import type { RenderResult } from '@testing-library/react';
 import type { ReactNode } from 'react';
@@ -11,6 +12,7 @@ import { App } from '../app';
 // Mock the hooks and SDK functions
 jest.mock('@canva/app-hooks');
 jest.mock('@canva/design');
+jest.mock('@canva/platform');
 
 function renderInTestProvider(node: ReactNode): RenderResult {
   return render(
@@ -24,6 +26,8 @@ describe('Printssistant App Tests', () => {
   const mockIsSupported = jest.fn();
   const mockUseFeatureSupport = jest.mocked(useFeatureSupport);
   const mockGetCurrentPageContext = jest.mocked(getCurrentPageContext);
+  const mockRequestExport = jest.mocked(requestExport);
+  const mockRequestOpenExternalUrl = jest.mocked(requestOpenExternalUrl);
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -37,13 +41,22 @@ describe('Printssistant App Tests', () => {
         height: 144, // 2 inches in points
       },
     } as Awaited<ReturnType<typeof getCurrentPageContext>>);
+
+    // Mock export
+    mockRequestExport.mockResolvedValue({
+      status: 'completed',
+      title: 'Test Design',
+      exportBlobs: [{ url: 'https://example.com/file.pdf' }],
+    } as Awaited<ReturnType<typeof requestExport>>);
+
+    // Mock open URL
+    mockRequestOpenExternalUrl.mockResolvedValue({ status: 'completed' });
   });
 
   describe('Navigation Flow', () => {
     it('should show welcome view by default', () => {
       const result = renderInTestProvider(<App />);
       
-      // Check for welcome screen elements
       expect(result.getByText('Printssistant')).toBeInTheDocument();
       expect(result.getByText('Get Started')).toBeInTheDocument();
     });
@@ -51,11 +64,8 @@ describe('Printssistant App Tests', () => {
     it('should navigate from welcome to job-select when clicking Get Started', async () => {
       const result = renderInTestProvider(<App />);
       
-      // Click Get Started
-      const getStartedBtn = result.getByText('Get Started');
-      fireEvent.click(getStartedBtn);
+      fireEvent.click(result.getByText('Get Started'));
 
-      // Wait for job selector to appear
       await waitFor(() => {
         expect(result.getByText('Select Print Job')).toBeInTheDocument();
       });
@@ -64,37 +74,31 @@ describe('Printssistant App Tests', () => {
     it('should navigate from job-select to main when selecting a job', async () => {
       const result = renderInTestProvider(<App />);
       
-      // Go to job select
       fireEvent.click(result.getByText('Get Started'));
       
       await waitFor(() => {
         expect(result.getByText('Select Print Job')).toBeInTheDocument();
       });
 
-      // Find and click a job (Business Card should match our mock dimensions)
       const businessCardBtn = result.getByText(/Business Card/);
       fireEvent.click(businessCardBtn);
 
-      // Should now show main view with progress
       await waitFor(() => {
-        expect(result.getByText('Progress')).toBeInTheDocument();
+        expect(result.getByText('Getting Print Ready')).toBeInTheDocument();
       });
     });
 
     it('should navigate back from job-select to welcome', async () => {
       const result = renderInTestProvider(<App />);
       
-      // Go to job select
       fireEvent.click(result.getByText('Get Started'));
       
       await waitFor(() => {
         expect(result.getByText('Select Print Job')).toBeInTheDocument();
       });
 
-      // Click back button
       fireEvent.click(result.getByText('← Back'));
 
-      // Should be back at welcome
       await waitFor(() => {
         expect(result.getByText('Get Started')).toBeInTheDocument();
       });
@@ -102,21 +106,21 @@ describe('Printssistant App Tests', () => {
   });
 
   describe('Size Matching', () => {
-    it('should show size match indicator for matching dimensions', async () => {
+    it('should show size match confirmation for matching dimensions', async () => {
       const result = renderInTestProvider(<App />);
       
-      // Go to job select
       fireEvent.click(result.getByText('Get Started'));
+      await waitFor(() => expect(result.getByText('Select Print Job')).toBeInTheDocument());
       
+      const businessCardBtn = result.getByText(/Business Card/);
+      fireEvent.click(businessCardBtn);
+
       await waitFor(() => {
-        // Business Card (3.5" x 2") should show match indicator ✓
-        const businessCardBtn = result.getByText(/Business Card.*✓/);
-        expect(businessCardBtn).toBeInTheDocument();
+        expect(result.getByText(/Design size matches/)).toBeInTheDocument();
       });
     });
 
     it('should show size mismatch warning when dimensions do not match', async () => {
-      // Mock with different dimensions
       mockGetCurrentPageContext.mockResolvedValue({
         dimensions: {
           width: 612, // 8.5 inches
@@ -126,22 +130,14 @@ describe('Printssistant App Tests', () => {
 
       const result = renderInTestProvider(<App />);
       
-      // Go to job select
       fireEvent.click(result.getByText('Get Started'));
-      
-      await waitFor(() => {
-        expect(result.getByText('Select Print Job')).toBeInTheDocument();
-      });
+      await waitFor(() => expect(result.getByText('Select Print Job')).toBeInTheDocument());
 
-      // Select business card (will mismatch)
       const businessCardBtn = result.getByText(/Business Card/);
       fireEvent.click(businessCardBtn);
 
-      // Should show mismatch warning in main view
       await waitFor(() => {
-        expect(
-          result.getByText(/doesn't match/i)
-        ).toBeInTheDocument();
+        expect(result.getByText(/Design size may need adjustment/)).toBeInTheDocument();
       });
     });
   });
@@ -150,20 +146,16 @@ describe('Printssistant App Tests', () => {
     it('should track check completion and update progress', async () => {
       const result = renderInTestProvider(<App />);
       
-      // Navigate to main view
       fireEvent.click(result.getByText('Get Started'));
       await waitFor(() => expect(result.getByText('Select Print Job')).toBeInTheDocument());
       fireEvent.click(result.getByText(/Business Card/));
-      await waitFor(() => expect(result.getByText('Progress')).toBeInTheDocument());
+      await waitFor(() => expect(result.getByText('Getting Print Ready')).toBeInTheDocument());
 
-      // Initially 0/2 required
       expect(result.getByText(/0\/2/)).toBeInTheDocument();
 
-      // Complete the Bleed Check
-      const bleedCheck = result.getByLabelText(/Bleed Check/i);
+      const bleedCheck = result.getByLabelText(/Bleed Area/i);
       fireEvent.click(bleedCheck);
 
-      // Progress should update to 1/2
       await waitFor(() => {
         expect(result.getByText(/1\/2/)).toBeInTheDocument();
       });
@@ -172,22 +164,101 @@ describe('Printssistant App Tests', () => {
     it('should show success state when all required checks are complete', async () => {
       const result = renderInTestProvider(<App />);
       
-      // Navigate to main view
       fireEvent.click(result.getByText('Get Started'));
       await waitFor(() => expect(result.getByText('Select Print Job')).toBeInTheDocument());
       fireEvent.click(result.getByText(/Business Card/));
-      await waitFor(() => expect(result.getByText('Progress')).toBeInTheDocument());
+      await waitFor(() => expect(result.getByText('Getting Print Ready')).toBeInTheDocument());
 
-      // Complete both required checks
-      const bleedCheck = result.getByLabelText(/Bleed Check/i);
-      const safeZoneCheck = result.getByLabelText(/Safe Zone Check/i);
+      const bleedCheck = result.getByLabelText(/Bleed Area/i);
+      const safeZoneCheck = result.getByLabelText(/Safe Zone/i);
       
       fireEvent.click(bleedCheck);
       fireEvent.click(safeZoneCheck);
 
-      // Should show success state
       await waitFor(() => {
         expect(result.getByText('Ready for Print!')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Export Functionality', () => {
+    it('should show export button in success state', async () => {
+      const result = renderInTestProvider(<App />);
+      
+      // Navigate to main and complete checks
+      fireEvent.click(result.getByText('Get Started'));
+      await waitFor(() => expect(result.getByText('Select Print Job')).toBeInTheDocument());
+      fireEvent.click(result.getByText(/Business Card/));
+      await waitFor(() => expect(result.getByText('Getting Print Ready')).toBeInTheDocument());
+
+      fireEvent.click(result.getByLabelText(/Bleed Area/i));
+      fireEvent.click(result.getByLabelText(/Safe Zone/i));
+
+      await waitFor(() => {
+        expect(result.getByText('Download Print-Ready PDF')).toBeInTheDocument();
+      });
+    });
+
+    it('should not show export button before completing checks', async () => {
+      const result = renderInTestProvider(<App />);
+      
+      fireEvent.click(result.getByText('Get Started'));
+      await waitFor(() => expect(result.getByText('Select Print Job')).toBeInTheDocument());
+      fireEvent.click(result.getByText(/Business Card/));
+      await waitFor(() => expect(result.getByText('Getting Print Ready')).toBeInTheDocument());
+
+      // Only complete one check
+      fireEvent.click(result.getByLabelText(/Bleed Area/i));
+
+      expect(result.queryByText('Download Print-Ready PDF')).not.toBeInTheDocument();
+    });
+
+    it('should show confirmation checklist in success state', async () => {
+      const result = renderInTestProvider(<App />);
+      
+      fireEvent.click(result.getByText('Get Started'));
+      await waitFor(() => expect(result.getByText('Select Print Job')).toBeInTheDocument());
+      fireEvent.click(result.getByText(/Business Card/));
+      await waitFor(() => expect(result.getByText('Getting Print Ready')).toBeInTheDocument());
+
+      fireEvent.click(result.getByLabelText(/Bleed Area/i));
+      fireEvent.click(result.getByLabelText(/Safe Zone/i));
+
+      await waitFor(() => {
+        expect(result.getByText(/All checks passed/)).toBeInTheDocument();
+        expect(result.getByText(/Size verified/)).toBeInTheDocument();
+        expect(result.getByText(/Print setup complete/)).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Progressive Disclosure', () => {
+    it('should hide optional checks by default', async () => {
+      const result = renderInTestProvider(<App />);
+      
+      fireEvent.click(result.getByText('Get Started'));
+      await waitFor(() => expect(result.getByText('Select Print Job')).toBeInTheDocument());
+      fireEvent.click(result.getByText(/Business Card/));
+      await waitFor(() => expect(result.getByText('Getting Print Ready')).toBeInTheDocument());
+
+      // Optional checks should be collapsed
+      expect(result.getByText(/Recommended checks/)).toBeInTheDocument();
+      expect(result.queryByLabelText(/Color Check/i)).not.toBeInTheDocument();
+    });
+
+    it('should show optional checks when expanded', async () => {
+      const result = renderInTestProvider(<App />);
+      
+      fireEvent.click(result.getByText('Get Started'));
+      await waitFor(() => expect(result.getByText('Select Print Job')).toBeInTheDocument());
+      fireEvent.click(result.getByText(/Business Card/));
+      await waitFor(() => expect(result.getByText('Getting Print Ready')).toBeInTheDocument());
+
+      // Expand optional checks
+      fireEvent.click(result.getByText(/Recommended checks/));
+
+      await waitFor(() => {
+        expect(result.getByLabelText(/Color Check/i)).toBeInTheDocument();
       });
     });
   });

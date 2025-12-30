@@ -1,9 +1,10 @@
 /**
  * Main analysis view with progress, DPI analysis, and manual checks.
+ * Features progressive disclosure and user-friendly language.
  */
 
-import { useMemo } from 'react';
-import { Alert, Badge, Button, Columns, ProgressBar, Rows, Text, Title } from '@canva/app-ui-kit';
+import { useMemo, useState } from 'react';
+import { Alert, Badge, Button, Columns, ProgressBar, Rows, Text } from '@canva/app-ui-kit';
 import { useIntl } from 'react-intl';
 import * as styles from 'styles/components.css';
 import type { PrintJob } from '../data/printJobs';
@@ -39,6 +40,9 @@ export function MainView({
   const intl = useIntl();
   const requiredChecks = getRequiredChecks();
   const optionalChecks = getOptionalChecks();
+  
+  // State for progressive disclosure
+  const [showOptionalChecks, setShowOptionalChecks] = useState(false);
 
   // Calculate progress based on required checks
   const requiredCompleted = useMemo(() => {
@@ -61,12 +65,17 @@ export function MainView({
     job.heightIn,
     job.widthIn
   );
+  const hasProperSize = sizeMatches || sizeMatchesRotated;
 
   // Show success state when all required checks complete
   if (allRequiredComplete) {
     return (
       <div className={styles.scrollContainer}>
-        <SuccessState job={job} onStartOver={onStartOver} />
+        <SuccessState 
+          job={job} 
+          completedChecks={completedChecks}
+          onStartOver={onStartOver} 
+        />
       </div>
     );
   }
@@ -92,22 +101,50 @@ export function MainView({
           />
         </Columns>
 
-        {/* Size mismatch warning */}
-        {!sizeMatches && !sizeMatchesRotated && (
+        {/* Size mismatch warning - friendly language */}
+        {!hasProperSize && (
           <Alert tone="warn">
+            <Rows spacing="0.5u">
+              <Text size="small">
+                <strong>
+                  {intl.formatMessage({
+                    defaultMessage: 'Design size may need adjustment',
+                    description: 'Size mismatch title',
+                  })}
+                </strong>
+              </Text>
+              <Text size="small">
+                {intl.formatMessage(
+                  {
+                    defaultMessage:
+                      'Your design is {designSize}, but {jobName} requires {jobSize}. The print may be scaled or cropped.',
+                    description: 'Size mismatch explanation',
+                  },
+                  {
+                    designSize: formatDimensions(designWidthIn, designHeightIn),
+                    jobName: job.name,
+                    jobSize: formatDimensions(job.widthIn, job.heightIn),
+                  }
+                )}
+              </Text>
+              <Button variant="tertiary" onClick={onChangeJob}>
+                {intl.formatMessage({
+                  defaultMessage: 'Choose a different size',
+                  description: 'Change size suggestion',
+                })}
+              </Button>
+            </Rows>
+          </Alert>
+        )}
+
+        {/* Size match confirmation */}
+        {hasProperSize && (
+          <Alert tone="positive">
             <Text size="small">
-              {intl.formatMessage(
-                {
-                  defaultMessage:
-                    "Design size ({designSize}) doesn't match {jobName} ({jobSize}). Your print may be cropped or scaled.",
-                  description: 'Size mismatch warning',
-                },
-                {
-                  designSize: formatDimensions(designWidthIn, designHeightIn),
-                  jobName: job.name,
-                  jobSize: formatDimensions(job.widthIn, job.heightIn),
-                }
-              )}
+              {`✓ ${intl.formatMessage({
+                defaultMessage: 'Design size matches',
+                description: 'Size match confirmation',
+              })} ${formatDimensions(job.widthIn, job.heightIn)}`}
             </Text>
           </Alert>
         )}
@@ -117,22 +154,18 @@ export function MainView({
           <Columns spacing="1u" alignY="center">
             <Text size="small">
               {intl.formatMessage({
-                defaultMessage: 'Progress',
-                description: 'Progress label',
+                defaultMessage: 'Getting Print Ready',
+                description: 'Progress heading',
               })}
             </Text>
             <Text size="small" tone="tertiary">
-              {`${requiredCompleted}/${requiredChecks.length} `}
-              {intl.formatMessage({
-                defaultMessage: 'required',
-                description: 'Required label',
-              })}
+              {`${requiredCompleted}/${requiredChecks.length}`}
             </Text>
           </Columns>
           <ProgressBar
             value={progress}
             ariaLabel={intl.formatMessage({
-              defaultMessage: 'Preflight progress',
+              defaultMessage: 'Print preparation progress',
               description: 'Progress bar label',
             })}
           />
@@ -141,15 +174,21 @@ export function MainView({
         {/* DPI Analysis section */}
         <DPIAnalyzer job={job} analysis={imageAnalysis} />
 
-        {/* Required checks */}
+        {/* Required checks - friendly titles */}
         <Rows spacing="1u">
           <Text>
             <strong>
               {intl.formatMessage({
-                defaultMessage: 'Required Checks',
-                description: 'Required checks heading',
+                defaultMessage: 'Quick Checks',
+                description: 'Required checks heading - friendly',
               })}
             </strong>
+          </Text>
+          <Text size="small" tone="tertiary">
+            {intl.formatMessage({
+              defaultMessage: 'Complete these to ensure your design prints correctly.',
+              description: 'Required checks description',
+            })}
           </Text>
           {requiredChecks.map((check) => (
             <ManualCheckItem
@@ -161,24 +200,44 @@ export function MainView({
           ))}
         </Rows>
 
-        {/* Optional checks */}
+        {/* Optional checks - collapsed by default */}
         <Rows spacing="1u">
-          <Text>
-            <strong>
-              {intl.formatMessage({
-                defaultMessage: 'Optional Checks',
-                description: 'Optional checks heading',
-              })}
-            </strong>
-          </Text>
-          {optionalChecks.map((check) => (
-            <ManualCheckItem
-              key={check.id}
-              check={check}
-              completed={completedChecks.includes(check.id)}
-              onToggle={onToggleCheck}
-            />
-          ))}
+          <Button 
+            variant="tertiary" 
+            onClick={() => setShowOptionalChecks(!showOptionalChecks)}
+          >
+            {showOptionalChecks
+              ? intl.formatMessage({
+                  defaultMessage: '▼ Hide recommended checks',
+                  description: 'Collapse optional checks',
+                })
+              : intl.formatMessage(
+                  {
+                    defaultMessage: '▶ Recommended checks ({count})',
+                    description: 'Expand optional checks',
+                  },
+                  { count: optionalChecks.length }
+                )}
+          </Button>
+          
+          {showOptionalChecks && (
+            <Rows spacing="1u">
+              <Text size="small" tone="tertiary">
+                {intl.formatMessage({
+                  defaultMessage: 'These are optional but help ensure the best results.',
+                  description: 'Optional checks description',
+                })}
+              </Text>
+              {optionalChecks.map((check) => (
+                <ManualCheckItem
+                  key={check.id}
+                  check={check}
+                  completed={completedChecks.includes(check.id)}
+                  onToggle={onToggleCheck}
+                />
+              ))}
+            </Rows>
+          )}
         </Rows>
 
         {/* Contextual tips */}

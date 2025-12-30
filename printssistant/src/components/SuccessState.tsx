@@ -1,99 +1,133 @@
 /**
  * Success state displayed when all required checks are complete.
+ * Includes visual confirmation, export button, and next steps.
  */
 
-import { Button, Rows, Text, Title } from '@canva/app-ui-kit';
+import { Alert, Button, Rows, Text, Title } from '@canva/app-ui-kit';
 import { useIntl } from 'react-intl';
 import type { PrintJob } from '../data/printJobs';
 import { formatDimensions } from '../lib/formatting';
+import { ExportButton } from './ExportButton';
 
 interface SuccessStateProps {
   job: PrintJob;
+  completedChecks: string[];
   onStartOver: () => void;
 }
 
-export function SuccessState({ job, onStartOver }: SuccessStateProps) {
+export function SuccessState({ job, completedChecks, onStartOver }: SuccessStateProps) {
   const intl = useIntl();
 
   return (
-    <Rows spacing="2u" align="center">
-      {/* Celebration icon */}
-      <div style={{ fontSize: '64px', textAlign: 'center' }}>
-        <span role="img" aria-label="Celebration">🎉</span>
-      </div>
+    <Rows spacing="2u">
+      {/* Celebration header */}
+      <Rows spacing="1u" align="center">
+        <div style={{ fontSize: '48px', textAlign: 'center' }}>
+          <span role="img" aria-label="Celebration">🎉</span>
+        </div>
 
-      <Title size="large" alignment="center">
-        {intl.formatMessage({
-          defaultMessage: 'Ready for Print!',
-          description: 'Success title',
-        })}
-      </Title>
+        <Title size="large" alignment="center">
+          {intl.formatMessage({
+            defaultMessage: 'Ready for Print!',
+            description: 'Success title',
+          })}
+        </Title>
+      </Rows>
 
-      <Text alignment="center" tone="positive">
-        {intl.formatMessage(
-          {
-            defaultMessage: 'All required checks are complete for {jobName}.',
-            description: 'Success message',
-          },
-          { jobName: job.name }
-        )}
-      </Text>
+      {/* Confirmation banner */}
+      <Alert tone="positive">
+        <Rows spacing="0.5u">
+          <Text size="small">
+            <strong>
+              {intl.formatMessage({
+                defaultMessage: 'All checks passed',
+                description: 'Success banner title',
+              })}
+            </strong>
+          </Text>
+          <Text size="small">
+            {`✓ ${intl.formatMessage({
+              defaultMessage: 'Size verified',
+              description: 'Size check confirmed',
+            })} (${formatDimensions(job.widthIn, job.heightIn)})`}
+          </Text>
+          <Text size="small">
+            {`✓ ${intl.formatMessage({
+              defaultMessage: 'Print setup complete',
+              description: 'Print setup confirmed',
+            })}`}
+          </Text>
+          <Text size="small">
+            {`✓ ${intl.formatMessage(
+              {
+                defaultMessage: '{count} checks completed',
+                description: 'Checks count',
+              },
+              { count: completedChecks.length }
+            )}`}
+          </Text>
+        </Rows>
+      </Alert>
 
-      {/* Job summary */}
-      <Rows spacing="0.5u" align="center">
-        <Text size="small" tone="secondary" alignment="center">
+      {/* Export section */}
+      <Rows spacing="1u">
+        <Text alignment="center">
+          <strong>
+            {intl.formatMessage({
+              defaultMessage: 'Get Your Print File',
+              description: 'Export section title',
+            })}
+          </strong>
+        </Text>
+
+        <ExportButton job={job} completedChecks={completedChecks} />
+      </Rows>
+
+      {/* Print specifications summary */}
+      <Rows spacing="0.5u">
+        <Text size="small" tone="tertiary">
+          {intl.formatMessage({
+            defaultMessage: 'Print Specifications:',
+            description: 'Specs heading',
+          })}
+        </Text>
+        <Text size="small" tone="secondary">
           {intl.formatMessage(
             {
-              defaultMessage: 'Size: {dimensions}',
-              description: 'Job size',
+              defaultMessage: 'Trim Size: {dimensions}',
+              description: 'Trim size spec',
             },
             { dimensions: formatDimensions(job.widthIn, job.heightIn) }
           )}
         </Text>
-        <Text size="small" tone="secondary" alignment="center">
-          {intl.formatMessage(
-            {
-              defaultMessage: 'Bleed: {bleed}" | Safe Zone: {safe}"',
-              description: 'Job margins',
-            },
-            { bleed: job.bleedIn, safe: job.safeMarginIn }
-          )}
-        </Text>
+        {job.bleedIn > 0 && (
+          <Text size="small" tone="secondary">
+            {intl.formatMessage(
+              {
+                defaultMessage: 'Bleed: {bleed}"',
+                description: 'Bleed spec',
+              },
+              { bleed: job.bleedIn }
+            )}
+          </Text>
+        )}
+        {job.safeMarginIn > 0 && (
+          <Text size="small" tone="secondary">
+            {intl.formatMessage(
+              {
+                defaultMessage: 'Safe Zone: {safe}" from edge',
+                description: 'Safe zone spec',
+              },
+              { safe: job.safeMarginIn }
+            )}
+          </Text>
+        )}
       </Rows>
 
-      {/* Next steps */}
-      <Rows spacing="1u">
-        <Text size="small" alignment="center">
-          <strong>
-            {intl.formatMessage({
-              defaultMessage: 'Next Steps:',
-              description: 'Next steps heading',
-            })}
-          </strong>
-        </Text>
-        <Text size="small" alignment="center">
-          {intl.formatMessage({
-            defaultMessage: '1. Export your design as a print-ready PDF',
-            description: 'Step 1',
-          })}
-        </Text>
-        <Text size="small" alignment="center">
-          {intl.formatMessage({
-            defaultMessage: '2. Verify bleed marks are included in export settings',
-            description: 'Step 2',
-          })}
-        </Text>
-        <Text size="small" alignment="center">
-          {intl.formatMessage({
-            defaultMessage: '3. Send to your printer with the spec sheet',
-            description: 'Step 3',
-          })}
-        </Text>
-      </Rows>
-
-      <Button variant="secondary" onClick={onStartOver} stretch>
+      {/* Start over option */}
+      <Button variant="tertiary" onClick={onStartOver}>
         {intl.formatMessage({
-          defaultMessage: 'Start Over',
+          defaultMessage: 'Start Over with Different Job',
           description: 'Reset button',
         })}
       </Button>
