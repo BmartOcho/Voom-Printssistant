@@ -112,8 +112,32 @@ export function ExportButton({
         }
       }
 
-      // Open the download URL
-      await requestOpenExternalUrl({ url: exportUrl });
+      // Download the PDF automatically instead of opening in browser
+      try {
+        // Fetch the PDF blob
+        const response = await fetch(exportUrl);
+        if (!response.ok) {
+          throw new Error("Failed to fetch PDF");
+        }
+        const blob = await response.blob();
+
+        // Create a download link and trigger it
+        const downloadUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = downloadUrl;
+        link.download = `${designTitle || exportResult.title || job.name}_print-ready.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Clean up the object URL
+        setTimeout(() => URL.revokeObjectURL(downloadUrl), 100);
+      } catch (downloadErr) {
+        // If automatic download fails, fall back to opening in new tab
+        // eslint-disable-next-line no-console
+        console.warn("Automatic download failed, opening in browser:", downloadErr);
+        await requestOpenExternalUrl({ url: exportUrl });
+      }
 
       setStatus("success");
 
@@ -211,7 +235,7 @@ export function ExportButton({
       <Alert tone="positive">
         <Text size="small">
           {intl.formatMessage({
-            defaultMessage: "Your PDF is ready!",
+            defaultMessage: "Your PDF has been downloaded!",
             description: "Export success message",
           })}
         </Text>
