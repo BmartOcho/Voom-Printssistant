@@ -95,7 +95,7 @@ export function getChecksByCategory(): Record<string, ManualCheck[]> {
     if (!grouped[check.category]) {
       grouped[check.category] = [];
     }
-    grouped[check.category].push(check);
+    grouped[check.category]!.push(check);
   }
   return grouped;
 }

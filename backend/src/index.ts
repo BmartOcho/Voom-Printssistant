@@ -10,7 +10,9 @@ import {
   ProductRule,
   ProductRuleSchema,
   Job,
-  JobCreateSchema
+  JobCreateSchema,
+  CanvaFolder,
+  CanvaTemplate
 } from "@printssistant/shared";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -169,6 +171,96 @@ app.get("/api/jobs/:jobId", (req, res) => {
   const job = db.getJob(req.params.jobId);
   if (!job) return res.status(404).json({ error: "Job not found" });
   res.json(job);
+});
+
+// --- Folders & Templates API ---
+
+// List organization folders
+app.get("/api/folders", (req, res) => {
+  // For now, return mock data representing organization folders
+  // In production, this would integrate with Canva Connect API
+  const mockFolders: CanvaFolder[] = [
+    {
+      id: "folder_1",
+      name: "Print Templates",
+      itemCount: 12,
+      description: "Standard print templates for business cards, flyers, etc."
+    },
+    {
+      id: "folder_2",
+      name: "Marketing Materials",
+      itemCount: 8,
+      description: "Marketing and promotional templates"
+    },
+    {
+      id: "folder_3",
+      name: "Label Templates",
+      itemCount: 15,
+      description: "Product label and sticker templates"
+    }
+  ];
+  
+  res.json(mockFolders);
+});
+
+// List templates in a specific folder
+app.get("/api/folders/:folderId/templates", (req, res) => {
+  const { folderId } = req.params;
+  
+  // Mock templates data - in production, this would fetch from Canva Connect API
+  const mockTemplates: CanvaTemplate[] = [
+    {
+      id: "template_1",
+      name: "Business Card - Modern",
+      folderId,
+      thumbnailUrl: "https://via.placeholder.com/300x200",
+      widthPx: 1050,
+      heightPx: 600,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    },
+    {
+      id: "template_2",
+      name: "Flyer - Corporate",
+      folderId,
+      thumbnailUrl: "https://via.placeholder.com/300x400",
+      widthPx: 2550,
+      heightPx: 3300,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    },
+    {
+      id: "template_3",
+      name: "Label - Product",
+      folderId,
+      thumbnailUrl: "https://via.placeholder.com/300x300",
+      widthPx: 1200,
+      heightPx: 1200,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+  ];
+  
+  res.json(mockTemplates);
+});
+
+// Get a specific template by ID
+app.get("/api/templates/:templateId", (req, res) => {
+  const { templateId } = req.params;
+  
+  // Mock template data
+  const mockTemplate: CanvaTemplate = {
+    id: templateId,
+    name: "Sample Template",
+    folderId: "folder_1",
+    thumbnailUrl: "https://via.placeholder.com/300x200",
+    widthPx: 1050,
+    heightPx: 600,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  
+  res.json(mockTemplate);
 });
 
 // --- Admin API ---

@@ -30,6 +30,36 @@ export const TemplateMappingSchema = z.object({
 
 export type TemplateMapping = z.infer<typeof TemplateMappingSchema>;
 
+// --- Canva Folders & Templates ---
+
+/**
+ * Represents a Canva folder that contains templates or other designs
+ */
+export const CanvaFolderSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  itemCount: z.number().int().default(0),
+  description: z.string().optional(),
+});
+
+export type CanvaFolder = z.infer<typeof CanvaFolderSchema>;
+
+/**
+ * Represents a Canva template/design that can be copied and edited
+ */
+export const CanvaTemplateSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  folderId: z.string(),
+  thumbnailUrl: z.string().optional(),
+  widthPx: z.number().int().optional(),
+  heightPx: z.number().int().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+
+export type CanvaTemplate = z.infer<typeof CanvaTemplateSchema>;
+
 // --- Exports ---
 
 export const ExportPayloadSchema = z.object({
