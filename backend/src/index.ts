@@ -263,6 +263,48 @@ app.get("/api/templates/:templateId", (req, res) => {
   res.json(mockTemplate);
 });
 
+// Copy a template (for production, this will use Canva Connect API)
+app.post("/api/templates/:templateId/copy", async (req, res) => {
+  const { templateId } = req.params;
+  
+  try {
+    // In production, this would call Canva Connect API:
+    // const response = await fetch(
+    //   `https://api.canva.com/rest/v1/brand-templates/${templateId}/copy`,
+    //   {
+    //     method: 'POST',
+    //     headers: {
+    //       'Authorization': `Bearer ${accessToken}`,
+    //       'Content-Type': 'application/json'
+    //     }
+    //   }
+    // );
+    // const { design } = await response.json();
+    // return res.json({ 
+    //   designId: design.id, 
+    //   editUrl: design.urls.edit_url 
+    // });
+    
+    // For MVP: Return mock response
+    const mockDesignId = `design_copy_${crypto.randomUUID()}`;
+    const mockEditUrl = `https://www.canva.com/design/${mockDesignId}/edit`;
+    
+    res.json({
+      success: true,
+      designId: mockDesignId,
+      editUrl: mockEditUrl,
+      originalTemplateId: templateId,
+      message: "Template copied successfully (mock response - integrate Canva Connect API for production)"
+    });
+  } catch (error) {
+    console.error("Failed to copy template:", error);
+    res.status(500).json({
+      error: "Failed to copy template",
+      details: error instanceof Error ? error.message : "Unknown error"
+    });
+  }
+});
+
 // --- Admin API ---
 
 const adminAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {

@@ -1,13 +1,13 @@
 /**
  * Hook for managing Canva template operations
- * Handles template selection and preparation
+ * Handles template copying via backend API
  */
 
 import { useState, useCallback } from "react";
 import type { CanvaTemplate } from "@printssistant/shared";
 
 interface UseTemplateOperationsResult {
-  selectTemplate: (template: CanvaTemplate) => Promise<void>;
+  copyTemplate: (template: CanvaTemplate) => Promise<{ designId: string; editUrl: string }>;
   selectedTemplate: CanvaTemplate | null;
   loading: boolean;
   error: string | null;
@@ -17,11 +17,7 @@ interface UseTemplateOperationsResult {
 /**
  * Hook to manage template operations
  * 
- * Note: In production, this would integrate with Canva Connect API to:
- * 1. Copy the template design
- * 2. Open the copied design in the editor
- * 
- * For MVP, we track the selected template for future integration.
+ * Copies templates via Canva Connect API to ensure originals are never edited
  */
 export const useTemplateOperations = (): UseTemplateOperationsResult => {
   const [loading, setLoading] = useState(false);
@@ -33,18 +29,13 @@ export const useTemplateOperations = (): UseTemplateOperationsResult => {
   }, []);
 
   /**
-   * Select a template for use
+   * Copy a template via backend API
    * 
-   * In production, this would:
-   * 1. Call backend endpoint: POST /api/templates/{templateId}/copy
-   * 2. Backend would use Canva Connect API to duplicate the template
-   * 3. Return the new design ID
-   * 4. User would be redirected to edit the new design
-   * 
-   * For MVP, we just store the selection.
+   * In production, this calls Canva Connect API to duplicate the template.
+   * Returns the new design ID and edit URL.
    */
-  const selectTemplate = useCallback(
-    async (template: CanvaTemplate) => {
+  const copyTemplate = useCallback(
+    async (template: CanvaTemplate): Promise<{ designId: string; editUrl: string }> => {
       setLoading(true);
       setError(null);
 
@@ -52,22 +43,37 @@ export const useTemplateOperations = (): UseTemplateOperationsResult => {
         // Store the selected template
         setSelectedTemplate(template);
         
-        // In production, you would:
-        // const backendHost = process.env.CANVA_BACKEND_HOST || "http://localhost:8787";
-        // const response = await fetch(`${backendHost}/api/templates/${template.id}/copy`, {
-        //   method: 'POST'
-        // });
-        // const { designId, editUrl } = await response.json();
-        // 
-        // Then redirect user to the edit URL or use deep linking
+        // Call backend to copy the template
+        const backendHost = process.env.CANVA_BACKEND_HOST || "http://localhost:8787";
+        const response = await fetch(`${backendHost}/api/templates/${template.id}/copy`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to copy template: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        
+        if (!data.success || !data.designId) {
+          throw new Error(data.error || 'Failed to copy template');
+        }
+
+        return {
+          designId: data.designId,
+          editUrl: data.editUrl,
+        };
         
       } catch (err) {
         const errorMessage =
           err instanceof Error
             ? err.message
-            : "Failed to select template";
+            : "Failed to copy template";
         setError(errorMessage);
-        console.error("Template operation error:", err);
+        console.error("Template copy error:", err);
         throw err;
       } finally {
         setLoading(false);
@@ -77,7 +83,7 @@ export const useTemplateOperations = (): UseTemplateOperationsResult => {
   );
 
   return {
-    selectTemplate,
+    copyTemplate,
     selectedTemplate,
     loading,
     error,

@@ -80,8 +80,11 @@ export const App = () => {
   const handleSelectTemplate = useCallback(
     async (template: CanvaTemplate) => {
       try {
-        // Select the template
-        await templateOps.selectTemplate(template);
+        // Copy the template (never edit the original!)
+        const { designId, editUrl } = await templateOps.copyTemplate(template);
+        
+        // Log the copy result (in production, you might redirect to editUrl)
+        console.log(`Template copied successfully:`, { designId, editUrl });
         
         // Create a job from the template
         const job = createJobFromTemplate(template);
@@ -93,7 +96,7 @@ export const App = () => {
         imageAnalysis.clear();
       } catch (err) {
         // Error is handled in the hook, just log here
-        console.error("Failed to select template:", err);
+        console.error("Failed to copy template:", err);
       }
     },
     [templateOps, pageContext, imageAnalysis]
