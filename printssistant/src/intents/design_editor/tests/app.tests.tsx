@@ -380,6 +380,181 @@ describe("Printssistant App Tests", () => {
     });
   });
 
+  describe("Custom Size Input", () => {
+    it("should show custom size input fields in job selector", async () => {
+      const result = renderInTestProvider(<App />);
+
+      fireEvent.click(result.getByText("Get Started"));
+      await waitFor(() =>
+        expect(result.getByText("Select Print Job")).toBeTruthy(),
+      );
+
+      expect(result.getByText("Custom Size")).toBeTruthy();
+      expect(result.getByPlaceholderText(/Width/)).toBeTruthy();
+      expect(result.getByPlaceholderText(/Height/)).toBeTruthy();
+      expect(result.getByText("Use Custom Size")).toBeTruthy();
+    });
+
+    it("should disable custom size button when inputs are invalid", async () => {
+      const result = renderInTestProvider(<App />);
+
+      fireEvent.click(result.getByText("Get Started"));
+      await waitFor(() =>
+        expect(result.getByText("Select Print Job")).toBeTruthy(),
+      );
+
+      const customButton = result.getByText("Use Custom Size");
+      expect(customButton).toHaveProperty("disabled", true);
+    });
+
+    it("should enable custom size button when valid dimensions are entered", async () => {
+      const result = renderInTestProvider(<App />);
+
+      fireEvent.click(result.getByText("Get Started"));
+      await waitFor(() =>
+        expect(result.getByText("Select Print Job")).toBeTruthy(),
+      );
+
+      const widthInput = result.getByPlaceholderText(/Width/);
+      const heightInput = result.getByPlaceholderText(/Height/);
+
+      fireEvent.change(widthInput, { target: { value: "5" } });
+      fireEvent.change(heightInput, { target: { value: "7" } });
+
+      await waitFor(() => {
+        const customButton = result.getByText(/Use Custom Size/);
+        expect(customButton).toHaveProperty("disabled", false);
+      });
+    });
+
+    it("should navigate to main view when custom size is selected", async () => {
+      const result = renderInTestProvider(<App />);
+
+      fireEvent.click(result.getByText("Get Started"));
+      await waitFor(() =>
+        expect(result.getByText("Select Print Job")).toBeTruthy(),
+      );
+
+      const widthInput = result.getByPlaceholderText(/Width/);
+      const heightInput = result.getByPlaceholderText(/Height/);
+
+      fireEvent.change(widthInput, { target: { value: "5" } });
+      fireEvent.change(heightInput, { target: { value: "7" } });
+
+      await waitFor(() => {
+        const customButton = result.getByText(/Use Custom Size/);
+        fireEvent.click(customButton);
+      });
+
+      await waitFor(() => {
+        expect(result.getByText("Getting Print Ready")).toBeTruthy();
+      });
+    });
+
+    it("should show match indicator when custom size matches design", async () => {
+      // Mock page context for 5x7 design
+      mockGetCurrentPageContext.mockResolvedValue({
+        dimensions: {
+          width: 5 * 72,
+          height: 7 * 72,
+        },
+      } as Awaited<ReturnType<typeof getCurrentPageContext>>);
+
+      const result = renderInTestProvider(<App />);
+
+      fireEvent.click(result.getByText("Get Started"));
+      await waitFor(() =>
+        expect(result.getByText("Select Print Job")).toBeTruthy(),
+      );
+
+      const widthInput = result.getByPlaceholderText(/Width/);
+      const heightInput = result.getByPlaceholderText(/Height/);
+
+      fireEvent.change(widthInput, { target: { value: "5" } });
+      fireEvent.change(heightInput, { target: { value: "7" } });
+
+      await waitFor(() => {
+        // Button should show checkmark for matching size
+        expect(result.getByText(/Use Custom Size ✓/)).toBeTruthy();
+      });
+    });
+
+    it("should show mismatch warning when custom size does not match design", async () => {
+      // Mock page context for different size
+      mockGetCurrentPageContext.mockResolvedValue({
+        dimensions: {
+          width: 8.5 * 72,
+          height: 11 * 72,
+        },
+      } as Awaited<ReturnType<typeof getCurrentPageContext>>);
+
+      const result = renderInTestProvider(<App />);
+
+      fireEvent.click(result.getByText("Get Started"));
+      await waitFor(() =>
+        expect(result.getByText("Select Print Job")).toBeTruthy(),
+      );
+
+      const widthInput = result.getByPlaceholderText(/Width/);
+      const heightInput = result.getByPlaceholderText(/Height/);
+
+      fireEvent.change(widthInput, { target: { value: "5" } });
+      fireEvent.change(heightInput, { target: { value: "7" } });
+
+      await waitFor(() => {
+        expect(
+          result.getByText(/Custom size doesn't match your current design dimensions/),
+        ).toBeTruthy();
+      });
+    });
+
+    it("should create custom job with appropriate bleed for small sizes", async () => {
+      const result = renderInTestProvider(<App />);
+
+      fireEvent.click(result.getByText("Get Started"));
+      await waitFor(() =>
+        expect(result.getByText("Select Print Job")).toBeTruthy(),
+      );
+
+      const widthInput = result.getByPlaceholderText(/Width/);
+      const heightInput = result.getByPlaceholderText(/Height/);
+
+      // Small size (should get 0.125" bleed)
+      fireEvent.change(widthInput, { target: { value: "4" } });
+      fireEvent.change(heightInput, { target: { value: "6" } });
+
+      const customButton = result.getByText(/Use Custom Size/);
+      fireEvent.click(customButton);
+
+      await waitFor(() => {
+        expect(result.getByText("Getting Print Ready")).toBeTruthy();
+      });
+    });
+
+    it("should create custom job with appropriate bleed for large sizes", async () => {
+      const result = renderInTestProvider(<App />);
+
+      fireEvent.click(result.getByText("Get Started"));
+      await waitFor(() =>
+        expect(result.getByText("Select Print Job")).toBeTruthy(),
+      );
+
+      const widthInput = result.getByPlaceholderText(/Width/);
+      const heightInput = result.getByPlaceholderText(/Height/);
+
+      // Large size (should get 0.25" bleed)
+      fireEvent.change(widthInput, { target: { value: "24" } });
+      fireEvent.change(heightInput, { target: { value: "36" } });
+
+      const customButton = result.getByText(/Use Custom Size/);
+      fireEvent.click(customButton);
+
+      await waitFor(() => {
+        expect(result.getByText("Getting Print Ready")).toBeTruthy();
+      });
+    });
+  });
+
   describe("Snapshot", () => {
     it("should have a consistent welcome view snapshot", () => {
       const result = renderInTestProvider(<App />);

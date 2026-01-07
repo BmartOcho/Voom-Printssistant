@@ -135,10 +135,11 @@ export const PRINT_JOBS: PrintJob[] = [
 export function getJobsByCategory(): Record<string, PrintJob[]> {
   const grouped: Record<string, PrintJob[]> = {};
   for (const job of PRINT_JOBS) {
-    if (!grouped[job.category]) {
-      grouped[job.category] = [];
+    const category = job.category;
+    if (!grouped[category]) {
+      grouped[category] = [];
     }
-    grouped[job.category].push(job);
+    grouped[category].push(job);
   }
   return grouped;
 }
@@ -154,4 +155,25 @@ export function getCategoryLabel(category: string): string {
     custom: "Custom",
   };
   return labels[category] || category;
+}
+
+/**
+ * Create a custom print job with user-specified dimensions.
+ * Uses sensible defaults for bleed and safe margins based on size.
+ */
+export function createCustomJob(widthIn: number, heightIn: number): PrintJob {
+  // Determine appropriate bleed and margins based on size
+  const isLarge = widthIn > 12 || heightIn > 12;
+  const bleedIn = isLarge ? 0.25 : 0.125;
+  const safeMarginIn = isLarge ? 0.5 : 0.25;
+
+  return {
+    id: "custom",
+    name: `Custom ${widthIn}" × ${heightIn}"`,
+    widthIn,
+    heightIn,
+    bleedIn,
+    safeMarginIn,
+    category: "custom",
+  };
 }

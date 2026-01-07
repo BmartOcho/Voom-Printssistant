@@ -2,10 +2,12 @@
  * Job selector view showing print job presets and current design size.
  */
 
+import { useState } from "react";
 import {
   Alert,
   Button,
   Columns,
+  NumberInput,
   Rows,
   Text,
   Title,
@@ -13,8 +15,10 @@ import {
 import { useIntl } from "react-intl";
 import * as styles from "styles/components.css";
 import type { PrintJob } from "../data/printJobs";
-import { getJobsByCategory, getCategoryLabel } from "../data/printJobs";
+import { getJobsByCategory, getCategoryLabel, createCustomJob } from "../data/printJobs";
 import { formatDimensions, dimensionsMatch } from "../lib/formatting";
+
+const MULTIPLY_SYMBOL = "×";
 
 interface JobSelectorProps {
   designWidthIn: number;
@@ -35,6 +39,10 @@ export function JobSelector({
 }: JobSelectorProps) {
   const intl = useIntl();
   const jobsByCategory = getJobsByCategory();
+  
+  // Custom size state
+  const [customWidth, setCustomWidth] = useState<string>("");
+  const [customHeight, setCustomHeight] = useState<string>("");
 
   // Check for size match with each job
   const getSizeMatchStatus = (
@@ -50,6 +58,40 @@ export function JobSelector({
     if (
       dimensionsMatch(designWidthIn, designHeightIn, job.heightIn, job.widthIn)
     ) {
+      return "rotated";
+    }
+    return "mismatch";
+  };
+
+  // Handle custom size selection
+  const handleCustomSizeSelect = () => {
+    const width = parseFloat(customWidth);
+    const height = parseFloat(customHeight);
+    
+    if (!isNaN(width) && width > 0 && !isNaN(height) && height > 0) {
+      const customJob = createCustomJob(width, height);
+      onSelectJob(customJob);
+    }
+  };
+
+  // Check if custom size inputs are valid
+  const isCustomSizeValid = () => {
+    const width = parseFloat(customWidth);
+    const height = parseFloat(customHeight);
+    return !isNaN(width) && width > 0 && !isNaN(height) && height > 0;
+  };
+
+  // Get match status for custom size
+  const getCustomSizeMatchStatus = (): "match" | "rotated" | "mismatch" | null => {
+    if (!isCustomSizeValid()) return null;
+    
+    const width = parseFloat(customWidth);
+    const height = parseFloat(customHeight);
+    
+    if (dimensionsMatch(designWidthIn, designHeightIn, width, height)) {
+      return "match";
+    }
+    if (dimensionsMatch(designWidthIn, designHeightIn, height, width)) {
       return "rotated";
     }
     return "mismatch";
@@ -106,7 +148,80 @@ export function JobSelector({
           </Rows>
         </Alert>
 
+        {/* Custom size input section */}
+        <Rows spacing="1u">
+          <Text size="small" tone="tertiary">
+            {intl.formatMessage({
+              defaultMessage: "Custom Size",
+              description: "Custom size section label",
+            })}
+          </Text>
+          
+          <Columns spacing="1u" alignY="end">
+            <NumberInput
+              value={customWidth}
+              onChange={(_num, str) => setCustomWidth(str)}
+              placeholder={intl.formatMessage({
+                defaultMessage: "Width (in)",
+                description: "Custom width placeholder",
+              })}
+              min={0.1}
+              step={0.125}
+            />
+            <Text>
+              <span aria-hidden="true">{MULTIPLY_SYMBOL}</span>
+            </Text>
+            <NumberInput
+              value={customHeight}
+              onChange={(_num, str) => setCustomHeight(str)}
+              placeholder={intl.formatMessage({
+                defaultMessage: "Height (in)",
+                description: "Custom height placeholder",
+              })}
+              min={0.1}
+              step={0.125}
+            />
+            <Button
+              variant={getCustomSizeMatchStatus() === "match" || getCustomSizeMatchStatus() === "rotated" ? "primary" : "secondary"}
+              onClick={handleCustomSizeSelect}
+              disabled={!isCustomSizeValid()}
+            >
+              {intl.formatMessage(
+                {
+                  defaultMessage: "Use Custom Size{status}",
+                  description: "Custom size submit button",
+                },
+                {
+                  status: getCustomSizeMatchStatus() === "match" 
+                    ? " ✓" 
+                    : getCustomSizeMatchStatus() === "rotated" 
+                    ? " ↻" 
+                    : "",
+                }
+              )}
+            </Button>
+          </Columns>
+
+          {isCustomSizeValid() && getCustomSizeMatchStatus() === "mismatch" && (
+            <Alert tone="warn">
+              <Text size="small">
+                {intl.formatMessage({
+                  defaultMessage: "Custom size doesn't match your current design dimensions.",
+                  description: "Custom size mismatch warning",
+                })}
+              </Text>
+            </Alert>
+          )}
+        </Rows>
+
         {/* Job categories */}
+        <Text size="small" tone="tertiary">
+          {intl.formatMessage({
+            defaultMessage: "Or choose a preset:",
+            description: "Preset section divider",
+          })}
+        </Text>
+
         {Object.entries(jobsByCategory).map(([category, jobs]) => (
           <Rows key={category} spacing="1u">
             <Text size="small" tone="tertiary">
