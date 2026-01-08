@@ -3,7 +3,7 @@
  *
  * Multi-view application that guides users through print preparation:
  * - Welcome: Branding and introduction
- * - Job Select: Choose print job type with size matching
+ * - Template Browse: Browse and select templates from organization folders
  * - Main: Preflight checks, DPI analysis, and tips
  */
 
@@ -14,24 +14,46 @@ import * as styles from "styles/components.css";
 
 // Components
 import { WelcomeView } from "../../components/WelcomeView";
-import { JobSelector } from "../../components/JobSelector";
 import { MainView } from "../../components/MainView";
+import { TemplateBrowser } from "../../components/TemplateBrowser";
 
 // Data
 import type { PrintJob } from "../../data/printJobs";
+import type { CanvaTemplate } from "@printssistant/shared";
 
 // Hooks
 import { usePageContext } from "../../hooks/usePageContext";
 import { useImageAnalysis } from "../../hooks/useImageAnalysis";
+import { useTemplateOperations } from "../../hooks/useTemplateOperations";
 
 // Types
-type AppView = "welcome" | "job-select" | "main";
+type AppView = "welcome" | "template-browse" | "main";
+
+/**
+ * Create a PrintJob from a selected template
+ * Uses template dimensions converted from pixels to inches (assuming 72 DPI)
+ */
+function createJobFromTemplate(template: CanvaTemplate): PrintJob {
+  // Convert pixels to inches (assuming 72 DPI for Canva templates)
+  const widthIn = template.widthPx ? template.widthPx / 72 : 8.5;
+  const heightIn = template.heightPx ? template.heightPx / 72 : 11;
+
+  return {
+    id: `template-${template.id}`,
+    name: template.name,
+    widthIn,
+    heightIn,
+    bleedIn: 0.125, // Standard bleed
+    safeMarginIn: 0.125, // Standard safe margin
+    category: "custom",
+  };
+}
 
 export const App = () => {
   // View navigation state
   const [view, setView] = useState<AppView>("welcome");
 
-  // Selected print job
+  // Selected print job (created from template)
   const [selectedJob, setSelectedJob] = useState<PrintJob | null>(null);
 
   // Completed check IDs
@@ -43,29 +65,47 @@ export const App = () => {
   // Image analysis hook
   const imageAnalysis = useImageAnalysis();
 
+  // Template operations hook
+  const templateOps = useTemplateOperations();
+
   // Navigation handlers
   const handleGetStarted = useCallback(() => {
-    setView("job-select");
-    pageContext.refresh(); // Refresh dimensions when entering job select
-  }, [pageContext]);
+    setView("template-browse");
+  }, []);
 
-  const handleSelectJob = useCallback(
-    (job: PrintJob) => {
-      setSelectedJob(job);
-      setView("main");
-      imageAnalysis.clear(); // Clear any previous analysis
-    },
-    [imageAnalysis],
-  );
-
-  const handleBack = useCallback(() => {
+  const handleBackToWelcome = useCallback(() => {
     setView("welcome");
   }, []);
 
-  const handleChangeJob = useCallback(() => {
-    setView("job-select");
-    pageContext.refresh();
-  }, [pageContext]);
+  const handleSelectTemplate = useCallback(
+    async (template: CanvaTemplate) => {
+      try {
+        // Copy the template (never edit the original!)
+        const { designId, editUrl } = await templateOps.copyTemplate(template);
+        
+        // Log the copy result (in production, you might redirect to editUrl)
+        console.log(`Template copied successfully:`, { designId, editUrl });
+        
+        // Create a job from the template
+        const job = createJobFromTemplate(template);
+        setSelectedJob(job);
+        
+        // Navigate to main analysis view
+        setView("main");
+        pageContext.refresh();
+        imageAnalysis.clear();
+      } catch (err) {
+        // Error is handled in the hook, just log here
+        console.error("Failed to copy template:", err);
+      }
+    },
+    [templateOps, pageContext, imageAnalysis]
+  );
+
+  const handleChangeTemplate = useCallback(() => {
+    setView("template-browse");
+    setSelectedJob(null);
+  }, []);
 
   const handleStartOver = useCallback(() => {
     setView("welcome");
@@ -89,15 +129,11 @@ export const App = () => {
     case "welcome":
       return <WelcomeView onGetStarted={handleGetStarted} />;
 
-    case "job-select":
+    case "template-browse":
       return (
-        <JobSelector
-          designWidthIn={pageContext.widthIn}
-          designHeightIn={pageContext.heightIn}
-          loading={pageContext.loading}
-          onSelectJob={handleSelectJob}
-          onBack={handleBack}
-          onRefresh={pageContext.refresh}
+        <TemplateBrowser
+          onSelectTemplate={handleSelectTemplate}
+          onBack={handleBackToWelcome}
         />
       );
 
@@ -110,8 +146,8 @@ export const App = () => {
               <Alert tone="critical">
                 <Text>
                   <FormattedMessage
-                    defaultMessage="No job selected. Please go back and select a job."
-                    description="Error when no job is selected"
+                    defaultMessage="No template selected. Please go back and select a template."
+                    description="Error when no template is selected"
                   />
                 </Text>
               </Alert>
@@ -127,7 +163,7 @@ export const App = () => {
           designHeightIn={pageContext.heightIn}
           completedChecks={completedChecks}
           onToggleCheck={handleToggleCheck}
-          onChangeJob={handleChangeJob}
+          onChangeJob={handleChangeTemplate}
           onStartOver={handleStartOver}
           imageAnalysis={imageAnalysis}
         />

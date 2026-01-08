@@ -16,6 +16,9 @@
   "intent": {
     "design_editor": {
       "enrolled": true
+    },
+    "data_connector": {
+      "enrolled": true
     }
   }
 }

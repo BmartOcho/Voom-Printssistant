@@ -138,7 +138,7 @@ export function getJobsByCategory(): Record<string, PrintJob[]> {
     if (!grouped[job.category]) {
       grouped[job.category] = [];
     }
-    grouped[job.category].push(job);
+    grouped[job.category]!.push(job);
   }
   return grouped;
 }
