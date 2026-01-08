@@ -1,23 +1,35 @@
 /**
  * Template Browser Component
- * Allows users to browse organization Canva folders and select templates
+ * Displays organization brand templates for users to select
  */
 
 import { useState, useEffect, useCallback } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import {
   Alert,
-  Badge,
   Button,
-  Columns,
-  Column,
+  ImageCard,
   LoadingIndicator,
   Rows,
   Text,
   Title,
 } from "@canva/app-ui-kit";
-import type { CanvaFolder, CanvaTemplate } from "@printssistant/shared";
+import type { CanvaTemplate } from "@printssistant/shared";
 import * as styles from "styles/components.css";
+
+interface BrandTemplate {
+  id: string;
+  title: string;
+  view_url: string;
+  create_url: string;
+  thumbnail?: {
+    width: number;
+    height: number;
+    url: string;
+  };
+  created_at?: number;
+  updated_at?: number;
+}
 
 interface TemplateBrowserProps {
   onSelectTemplate: (template: CanvaTemplate) => void;
@@ -29,49 +41,22 @@ export const TemplateBrowser = ({
   onBack,
 }: TemplateBrowserProps) => {
   const intl = useIntl();
-  const [folders, setFolders] = useState<CanvaFolder[]>([]);
-  const [selectedFolder, setSelectedFolder] = useState<CanvaFolder | null>(
-    null
-  );
-  const [templates, setTemplates] = useState<CanvaTemplate[]>([]);
+  const [templates, setTemplates] = useState<BrandTemplate[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch folders on component mount
+  // Fetch brand templates on component mount
   useEffect(() => {
-    fetchFolders();
+    fetchTemplates();
   }, []);
 
-  const fetchFolders = useCallback(async () => {
+  const fetchTemplates = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const backendHost =
-        process.env.CANVA_BACKEND_HOST || "http://localhost:8787";
-      const response = await fetch(`${backendHost}/api/folders`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch folders: ${response.statusText}`);
-      }
-      const data = await response.json();
-      setFolders(data);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load folders"
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const fetchTemplates = useCallback(async (folderId: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const backendHost =
-        process.env.CANVA_BACKEND_HOST || "http://localhost:8787";
-      const response = await fetch(
-        `${backendHost}/api/folders/${folderId}/templates`
-      );
+      // Use global BACKEND_HOST injected by Webpack
+      const backendHost = typeof BACKEND_HOST !== 'undefined' ? BACKEND_HOST : "http://localhost:8787";
+      const response = await fetch(`${backendHost}/api/brand-templates`);
       if (!response.ok) {
         throw new Error(`Failed to fetch templates: ${response.statusText}`);
       }
@@ -86,145 +71,43 @@ export const TemplateBrowser = ({
     }
   }, []);
 
-  const handleFolderClick = useCallback(
-    (folder: CanvaFolder) => {
-      setSelectedFolder(folder);
-      fetchTemplates(folder.id);
+  const handleTemplateClick = useCallback(
+    (template: BrandTemplate) => {
+      // Convert brand template to CanvaTemplate format
+      const canvaTemplate: CanvaTemplate = {
+        id: template.id,
+        name: template.title,
+        folderId: "brand-templates",
+        thumbnailUrl: template.thumbnail?.url,
+        widthPx: template.thumbnail?.width || 800,
+        heightPx: template.thumbnail?.height || 600,
+        createdAt: template.created_at
+          ? new Date(template.created_at * 1000).toISOString()
+          : new Date().toISOString(),
+        updatedAt: template.updated_at
+          ? new Date(template.updated_at * 1000).toISOString()
+          : new Date().toISOString(),
+      };
+      onSelectTemplate(canvaTemplate);
     },
-    [fetchTemplates]
+    [onSelectTemplate]
   );
 
-  const handleBackToFolders = useCallback(() => {
-    setSelectedFolder(null);
-    setTemplates([]);
-  }, []);
-
-  // Render folder list
-  if (!selectedFolder) {
-    return (
-      <div className={styles.scrollContainer}>
-        <Rows spacing="2u">
-          {/* Header */}
-          <Rows spacing="1u">
-            <Title size="small">
-              <FormattedMessage
-                defaultMessage="Browse Templates"
-                description="Template browser title"
-              />
-            </Title>
-            <Text>
-              <FormattedMessage
-                defaultMessage="Select a folder to view available templates"
-                description="Template browser subtitle"
-              />
-            </Text>
-          </Rows>
-
-          {/* Error Alert */}
-          {error && (
-            <Alert tone="critical">
-              <Text>{error}</Text>
-            </Alert>
-          )}
-
-          {/* Loading State */}
-          {loading && (
-            <Rows spacing="1u" align="center">
-              <LoadingIndicator size="medium" />
-              <Text>
-                <FormattedMessage
-                  defaultMessage="Loading folders..."
-                  description="Loading folders message"
-                />
-              </Text>
-            </Rows>
-          )}
-
-          {/* Folders List */}
-          {!loading && folders.length > 0 && (
-            <Rows spacing="1u">
-              {folders.map((folder) => (
-                <div
-                  key={folder.id}
-                  style={{
-                    padding: "12px",
-                    border: "1px solid #e0e0e0",
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                    transition: "all 0.2s",
-                  }}
-                  onClick={() => handleFolderClick(folder)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      handleFolderClick(folder);
-                    }
-                  }}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <Rows spacing="0.5u">
-                    <Columns spacing="1u" alignY="center">
-                      <Column width="fluid">
-                        <Text size="medium" tone="primary">
-                          {folder.name}
-                        </Text>
-                      </Column>
-                      <Column width="content">
-                        <Badge tone="info">
-                          <FormattedMessage
-                            defaultMessage="{count} items"
-                            description="Folder item count"
-                            values={{ count: folder.itemCount }}
-                          />
-                        </Badge>
-                      </Column>
-                    </Columns>
-                    {folder.description && (
-                      <Text size="small" tone="tertiary">
-                        {folder.description}
-                      </Text>
-                    )}
-                  </Rows>
-                </div>
-              ))}
-            </Rows>
-          )}
-
-          {/* Empty State */}
-          {!loading && folders.length === 0 && !error && (
-            <Alert tone="info">
-              <Text>
-                <FormattedMessage
-                  defaultMessage="No folders available"
-                  description="Empty folders message"
-                />
-              </Text>
-            </Alert>
-          )}
-
-          {/* Actions */}
-          <Button variant="secondary" onClick={onBack}>
-            {intl.formatMessage({
-              defaultMessage: "Back",
-              description: "Back button",
-            })}
-          </Button>
-        </Rows>
-      </div>
-    );
-  }
-
-  // Render templates in selected folder
   return (
     <div className={styles.scrollContainer}>
       <Rows spacing="2u">
         {/* Header */}
         <Rows spacing="1u">
-          <Title size="small">{selectedFolder.name}</Title>
+          <Title size="medium">
+            <FormattedMessage
+              defaultMessage="Browse Templates"
+              description="Template browser title"
+            />
+          </Title>
           <Text>
             <FormattedMessage
-              defaultMessage="Select a template to copy and customize"
-              description="Templates subtitle"
+              defaultMessage="Select a template to get started"
+              description="Template browser subtitle"
             />
           </Text>
         </Rows>
@@ -249,7 +132,7 @@ export const TemplateBrowser = ({
           </Rows>
         )}
 
-        {/* Templates Grid */}
+        {/* Templates List */}
         {!loading && templates.length > 0 && (
           <Rows spacing="1u">
             {templates.map((template) => (
@@ -262,49 +145,29 @@ export const TemplateBrowser = ({
                   cursor: "pointer",
                   transition: "all 0.2s",
                 }}
-                onClick={() => onSelectTemplate(template)}
+                onClick={() => handleTemplateClick(template)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
-                    onSelectTemplate(template);
+                    handleTemplateClick(template);
                   }
                 }}
                 role="button"
                 tabIndex={0}
               >
                 <Rows spacing="1u">
-                  {/* Template Thumbnail */}
-                  {template.thumbnailUrl && (
-                    <img
-                      src={template.thumbnailUrl}
-                      alt={template.name}
-                      style={{
-                        width: "100%",
-                        height: "auto",
-                        borderRadius: "4px",
-                        maxHeight: "200px",
-                        objectFit: "cover",
+                  {template.thumbnail && (
+                    <ImageCard
+                      alt={template.title}
+                      ariaLabel={template.title}
+                      thumbnailUrl={template.thumbnail.url}
+                      onDragStart={() => {
+                        // Drag handler
                       }}
                     />
                   )}
-                  
-                  {/* Template Info */}
-                  <Rows spacing="0.5u">
-                    <Text size="medium" tone="primary">
-                      {template.name}
-                    </Text>
-                    {template.widthPx && template.heightPx && (
-                      <Text size="small" tone="tertiary">
-                        <FormattedMessage
-                          defaultMessage="{width} × {height} px"
-                          description="Template dimensions"
-                          values={{
-                            width: template.widthPx,
-                            height: template.heightPx,
-                          }}
-                        />
-                      </Text>
-                    )}
-                  </Rows>
+                  <Text size="medium" tone="primary">
+                    {template.title}
+                  </Text>
                 </Rows>
               </div>
             ))}
@@ -316,7 +179,7 @@ export const TemplateBrowser = ({
           <Alert tone="info">
             <Text>
               <FormattedMessage
-                defaultMessage="No templates found in this folder"
+                defaultMessage="No templates available"
                 description="Empty templates message"
               />
             </Text>
@@ -324,10 +187,10 @@ export const TemplateBrowser = ({
         )}
 
         {/* Actions */}
-        <Button variant="secondary" onClick={handleBackToFolders}>
+        <Button variant="secondary" onClick={onBack}>
           {intl.formatMessage({
-            defaultMessage: "Back to Folders",
-            description: "Back to folders button",
+            defaultMessage: "Back",
+            description: "Back button",
           })}
         </Button>
       </Rows>

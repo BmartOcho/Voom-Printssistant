@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import session from "express-session";
 import cors from "cors";
 import path from "node:path";
 import { z } from "zod";
@@ -18,13 +19,39 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
+import {
+  generateAuthUrl,
+  exchangeCodeForToken,
+  refreshAccessToken,
+  generateState,
+  generatePKCEPair,
+  isTokenExpired,
+  type TokenData,
+  type CanvaAuthConfig,
+} from "./canva-auth.js";
+import { CanvaApiClient, filterPublicDesigns, type CanvaDesignWithSharing } from "./canva-api.js";
+import { TokenStorage } from "./token-storage.js";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? "*";
 const DATA_DIR = process.env.DATA_DIR ?? "./data";
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "secret123";
 
+// Canva OAuth Configuration
+const CANVA_CLIENT_ID = process.env.CANVA_CLIENT_ID ?? "";
+const CANVA_CLIENT_SECRET = process.env.CANVA_CLIENT_SECRET ?? "";
+const CANVA_REDIRECT_URI = process.env.CANVA_REDIRECT_URI ?? "http://localhost:8787/auth/callback";
+const SESSION_SECRET = process.env.SESSION_SECRET ?? "change-me-in-production";
+const TOKEN_ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY ?? "change-me-in-production-32chars";
+
 const db = new JsonDb(DATA_DIR);
+const tokenStorage = new TokenStorage(DATA_DIR, TOKEN_ENCRYPTION_KEY);
+
+const canvaAuthConfig: CanvaAuthConfig = {
+  clientId: CANVA_CLIENT_ID,
+  clientSecret: CANVA_CLIENT_SECRET,
+  redirectUri: CANVA_REDIRECT_URI,
+};
 
 // Ensure exports directory exists
 const EXPORTS_DIR = path.join(DATA_DIR, "exports");
@@ -48,13 +75,201 @@ async function downloadExportFile(url: string, id: string): Promise<string> {
   return filePath;
 }
 
+/**
+ * Get or refresh Canva API client for the organization account
+ */
+async function getCanvaClient(): Promise<CanvaApiClient | null> {
+  const tokenData = tokenStorage.getToken("organization");
+  
+  if (!tokenData) {
+    return null;
+  }
+
+  // Check if token is expired and refresh if needed
+  if (isTokenExpired(tokenData)) {
+    try {
+      const newTokenData = await refreshAccessToken(canvaAuthConfig, tokenData.refreshToken);
+      tokenStorage.updateToken("organization", newTokenData);
+      
+      return new CanvaApiClient({
+        accessToken: newTokenData.accessToken,
+        onTokenRefresh: async () => {
+          const refreshed = await refreshAccessToken(canvaAuthConfig, newTokenData.refreshToken);
+          tokenStorage.updateToken("organization", refreshed);
+          return refreshed.accessToken;
+        },
+      });
+    } catch (error) {
+      console.error("Failed to refresh token:", error);
+      return null;
+    }
+  }
+
+  return new CanvaApiClient({
+    accessToken: tokenData.accessToken,
+    onTokenRefresh: async () => {
+      const refreshed = await refreshAccessToken(canvaAuthConfig, tokenData.refreshToken);
+      tokenStorage.updateToken("organization", refreshed);
+      return refreshed.accessToken;
+    },
+  });
+}
+
 const app = express();
+
+// Session middleware (must come before routes that use sessions)
+app.use(
+  session({
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === "production", // HTTPS only in production
+      httpOnly: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    },
+  })
+);
+
 app.use(cors({ origin: CORS_ORIGIN === "*" ? true : CORS_ORIGIN }));
 app.use(express.json({ limit: "10mb" }));
 
 // --- Public API ---
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
+
+// --- OAuth Authentication ---
+
+/**
+ * Initiate OAuth flow with Canva
+ */
+app.get("/auth/canva", (req, res) => {
+  if (!CANVA_CLIENT_ID || !CANVA_CLIENT_SECRET) {
+    return res.status(500).json({
+      error: "Canva OAuth not configured. Please set CANVA_CLIENT_ID and CANVA_CLIENT_SECRET.",
+    });
+  }
+
+  const state = generateState();
+  const { codeVerifier, codeChallenge } = generatePKCEPair();
+  
+  // Store state and code_verifier in session for later use
+  if (req.session) {
+    (req.session as any).oauthState = state;
+    (req.session as any).codeVerifier = codeVerifier;
+  }
+
+  const authUrl = generateAuthUrl(canvaAuthConfig, state, codeChallenge);
+  res.redirect(authUrl);
+});
+
+/**
+ * OAuth callback handler
+ */
+app.get("/auth/callback", async (req, res) => {
+  const { code, state } = req.query;
+
+  // Verify state to prevent CSRF
+  const sessionState = req.session ? (req.session as any).oauthState : null;
+  if (!state || state !== sessionState) {
+    return res.status(400).json({ error: "Invalid state parameter" });
+  }
+
+  if (!code) {
+    return res.status(400).json({ error: "Missing authorization code" });
+  }
+
+  try {
+    // Retrieve code_verifier from session
+    const codeVerifier = req.session ? (req.session as any).codeVerifier : null;
+    if (!codeVerifier) {
+      return res.status(400).json({ error: "Missing code_verifier. Please restart OAuth flow." });
+    }
+
+    // Exchange code for tokens (with PKCE)
+    const tokenData = await exchangeCodeForToken(canvaAuthConfig, code as string, codeVerifier);
+    
+    // Store tokens for the organization (single shared account)
+    tokenStorage.storeToken("organization", tokenData);
+    
+    // Clear OAuth state from session
+    if (req.session) {
+      delete (req.session as any).oauthState;
+      delete (req.session as any).codeVerifier;
+    }
+
+    // Redirect to success page or close window
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Authentication Successful</title>
+        <style>
+          body { font-family: sans-serif; text-align: center; padding: 50px; }
+          .success { color: #22c55e; font-size: 24px; margin-bottom: 20px; }
+        </style>
+      </head>
+      <body>
+        <div class="success">✓ Successfully connected to Canva!</div>
+        <p>You can close this window and return to the app.</p>
+        <script>
+          // Try to close the window (works if opened as popup)
+          setTimeout(() => window.close(), 2000);
+        </script>
+      </body>
+      </html>
+    `);
+  } catch (error) {
+    console.error("OAuth callback error:", error);
+    res.status(500).json({
+      error: "Failed to complete authentication",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+/**
+ * Check authentication status (for organization account)
+ */
+app.get("/auth/status", (req, res) => {
+  const tokenData = tokenStorage.getToken("organization");
+  
+  if (!tokenData) {
+    return res.json({
+      authenticated: false,
+      message: "Organization not authenticated. Admin must complete OAuth setup.",
+    });
+  }
+
+  res.json({
+    authenticated: true,
+    userId: tokenData.userId,
+    expiresAt: tokenData.expiresAt,
+    isExpired: isTokenExpired(tokenData),
+  });
+});
+
+/**
+ * Logout and clear tokens
+ */
+app.post("/auth/logout", (req, res) => {
+  const userId = req.session ? (req.session as any).userId : null;
+  
+  if (userId && tokenStorage.hasToken(userId)) {
+    tokenStorage.deleteToken(userId);
+  }
+
+  if (req.session) {
+    req.session.destroy((err) => {
+      if (err) {
+        console.error("Session destroy error:", err);
+      }
+    });
+  }
+
+  res.json({ ok: true, message: "Logged out successfully" });
+});
+
 
 app.get("/api/rules", (req, res) => {
   const sku = String(req.query.sku ?? "").trim();
@@ -176,131 +391,140 @@ app.get("/api/jobs/:jobId", (req, res) => {
 // --- Folders & Templates API ---
 
 // List organization folders
-app.get("/api/folders", (req, res) => {
-  // For now, return mock data representing organization folders
-  // In production, this would integrate with Canva Connect API
-  const mockFolders: CanvaFolder[] = [
-    {
-      id: "folder_1",
-      name: "Print Templates",
-      itemCount: 12,
-      description: "Standard print templates for business cards, flyers, etc."
-    },
-    {
-      id: "folder_2",
-      name: "Marketing Materials",
-      itemCount: 8,
-      description: "Marketing and promotional templates"
-    },
-    {
-      id: "folder_3",
-      name: "Label Templates",
-      itemCount: 15,
-      description: "Product label and sticker templates"
-    }
-  ];
-  
-  res.json(mockFolders);
-});
-
-// List templates in a specific folder
-app.get("/api/folders/:folderId/templates", (req, res) => {
-  const { folderId } = req.params;
-  
-  // Mock templates data - in production, this would fetch from Canva Connect API
-  const mockTemplates: CanvaTemplate[] = [
-    {
-      id: "template_1",
-      name: "Business Card - Modern",
-      folderId,
-      thumbnailUrl: "https://via.placeholder.com/300x200",
-      widthPx: 1050,
-      heightPx: 600,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    },
-    {
-      id: "template_2",
-      name: "Flyer - Corporate",
-      folderId,
-      thumbnailUrl: "https://via.placeholder.com/300x400",
-      widthPx: 2550,
-      heightPx: 3300,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    },
-    {
-      id: "template_3",
-      name: "Label - Product",
-      folderId,
-      thumbnailUrl: "https://via.placeholder.com/300x300",
-      widthPx: 1200,
-      heightPx: 1200,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
-  ];
-  
-  res.json(mockTemplates);
-});
-
-// Get a specific template by ID
-app.get("/api/templates/:templateId", (req, res) => {
-  const { templateId } = req.params;
-  
-  // Mock template data
-  const mockTemplate: CanvaTemplate = {
-    id: templateId,
-    name: "Sample Template",
-    folderId: "folder_1",
-    thumbnailUrl: "https://via.placeholder.com/300x200",
-    widthPx: 1050,
-    heightPx: 600,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  };
-  
-  res.json(mockTemplate);
-});
-
-// Copy a template (for production, this will use Canva Connect API)
-app.post("/api/templates/:templateId/copy", async (req, res) => {
-  const { templateId } = req.params;
-  
+app.get("/api/folders", async (req, res) => {
   try {
-    // In production, this would call Canva Connect API:
-    // const response = await fetch(
-    //   `https://api.canva.com/rest/v1/brand-templates/${templateId}/copy`,
-    //   {
-    //     method: 'POST',
-    //     headers: {
-    //       'Authorization': `Bearer ${accessToken}`,
-    //       'Content-Type': 'application/json'
-    //     }
-    //   }
-    // );
-    // const { design } = await response.json();
-    // return res.json({ 
-    //   designId: design.id, 
-    //   editUrl: design.urls.edit_url 
-    // });
+    // Get Canva API client (uses organization token)
+    const client = await getCanvaClient();
     
-    // For MVP: Return mock response
-    const mockDesignId = `design_copy_${crypto.randomUUID()}`;
-    const mockEditUrl = `https://www.canva.com/design/${mockDesignId}/edit`;
+    if (!client) {
+      return res.status(503).json({
+        error: "Service not configured",
+        message: "Organization Canva account not authenticated. Contact administrator.",
+      });
+    }
+
+    // Fetch folders from Canva API
+    const canvaFolders = await client.listFolders();
+    
+    // Transform to our format
+    const folders: CanvaFolder[] = canvaFolders.map((folder) => ({
+      id: folder.id,
+      name: folder.name,
+      itemCount: 0, // We'll need to query each folder to get accurate count
+      description: `Updated ${folder.updated_at ? new Date(folder.updated_at).toLocaleDateString() : "recently"}`,
+    }));
+
+    res.json(folders);
+  } catch (error) {
+    console.error("Error fetching folders:", error);
+    res.status(500).json({
+      error: "Failed to fetch folders",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+// Test endpoint: List brand templates (organization-wide templates)  
+app.get("/api/brand-templates", async (req, res) => {
+  try {
+    const client = await getCanvaClient();
+    
+    if (!client) {
+      return res.status(503).json({
+        error: "Service not configured",
+        message: "Organization Canva account not authenticated. Contact administrator.",
+      });
+    }
+
+    const templates = await client.listBrandTemplates();
+    res.json(templates);
+  } catch (error) {
+    console.error("Error fetching brand templates:", error);
+    res.status(500).json({
+      error: "Failed to fetch brand templates",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+
+// List templates in a specific folder (only "Everyone with a link")
+app.get("/api/folders/:folderId/templates", async (req, res) => {
+  try {
+    const { folderId } = req.params;
+    
+    // Get Canva API client (uses organization token)
+    const client = await getCanvaClient();
+    
+    if (!client) {
+      return res.status(503).json({
+        error: "Service not configured",
+        message: "Organization Canva account not authenticated. Contact administrator.",
+      });
+    }
+
+    // Fetch designs from folder
+    const designs = await client.listFolderDesigns(folderId);
+    
+    // Filter to only include publicly shared designs
+    console.log(`Filtering ${designs.length} designs for public sharing...`);
+    const publicDesigns = await filterPublicDesigns(client, designs);
+    console.log(`Found ${publicDesigns.length} publicly shared designs`);
+    
+    // Transform to our CanvaTemplate format
+    const templates: CanvaTemplate[] = publicDesigns.map((design) => ({
+      id: design.id,
+      name: design.title,
+      folderId,
+      thumbnailUrl: design.thumbnail?.url,
+      widthPx: design.width,
+      heightPx: design.height,
+      createdAt: design.created_at,
+      updatedAt: design.updated_at,
+    }));
+
+    res.json(templates);
+  } catch (error) {
+    console.error("Error fetching templates:", error);
+    res.status(500).json({
+      error: "Failed to fetch templates",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+// Copy a template (with public sharing verification)
+app.post("/api/templates/:templateId/copy", async (req, res) => {
+  try {
+    const { templateId } = req.params;
+    
+    // Get Canva API client (uses organization token)
+    const client = await getCanvaClient();
+    
+    if (!client) {
+      return res.status(503).json({
+        error: "Service not configured",
+        message: "Organization Canva account not authenticated. Contact administrator.",
+      });
+    }
+
+
+    // Brand templates are organization-wide, so create from template instead of copying
+    console.log(`Creating design from brand template: ${templateId}`);
+    const result = await client.createFromBrandTemplate(templateId);
     
     res.json({
       success: true,
-      designId: mockDesignId,
-      editUrl: mockEditUrl,
+      designId: result.designId,
+      editUrl: result.editUrl,
       originalTemplateId: templateId,
-      message: "Template copied successfully (mock response - integrate Canva Connect API for production)"
+      message: "Template copied successfully",
     });
   } catch (error) {
     console.error("Failed to copy template:", error);
     res.status(500).json({
       error: "Failed to copy template",
-      details: error instanceof Error ? error.message : "Unknown error"
+      details: error instanceof Error ? error.message : "Unknown error",
     });
   }
 });
