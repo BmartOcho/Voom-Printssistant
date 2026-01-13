@@ -10,6 +10,7 @@ export interface Template {
   name: string;
   url: string;
   category: string;
+  categoryImage?: string; // Optional image URL for category button
   createdAt: string;
   updatedAt: string;
 }
