@@ -568,13 +568,13 @@ app.get("/api/canva-templates/categories", async (req, res) => {
 // Admin: Create template
 app.post("/api/admin/canva-templates", adminAuth, async (req, res) => {
   try {
-    const { name, url, category } = req.body;
+    const { name, url, category, categoryImage } = req.body;
     
     if (!name || !url || !category) {
       return res.status(400).json({ error: "Missing required fields: name, url, category" });
     }
 
-    const template = await templateManager.createTemplate({ name, url, category });
+    const template = await templateManager.createTemplate({ name, url, category, categoryImage });
     res.json(template);
   } catch (error) {
     console.error("Error creating template:", error);
@@ -586,9 +586,9 @@ app.post("/api/admin/canva-templates", adminAuth, async (req, res) => {
 app.put("/api/admin/canva-templates/:id", adminAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, url, category } = req.body;
+    const { name, url, category, categoryImage } = req.body;
 
-    const template = await templateManager.updateTemplate(id, { name, url, category });
+    const template = await templateManager.updateTemplate(id, { name, url, category, categoryImage });
     
     if (!template) {
       return res.status(404).json({ error: "Template not found" });
@@ -784,6 +784,8 @@ app.get("/admin/templates", (req, res) => {
             font-weight: 600;
         }
         .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .btn-secondary { background: #6b7280; color: white; margin-left: 0.5rem; }
+        .btn-warning { background: #f59e0b; color: white; margin-left: 0.5rem; }
         .btn-danger { background: #ef4444; color: white; margin-left: 0.5rem; }
         .template-item {
             background: #f9fafb;
@@ -804,13 +806,16 @@ app.get("/admin/templates", (req, res) => {
             font-size: 0.75rem;
             margin-right: 0.5rem;
         }
+        .btn-group { display: flex; gap: 0.5rem; }
+        #editSection { display: none; }
+        .help-text { font-size: 0.875rem; color: #6b7280; margin-top: 0.25rem; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🎨 Template Manager</h1>
         
-        <div class="card">
+        <div class="card" id="addSection">
             <h2 style="margin-bottom: 1.5rem;">Add New Template</h2>
             <form id="templateForm">
                 <div class="form-group">
@@ -826,10 +831,45 @@ app.get("/admin/templates", (req, res) => {
                     <input type="text" id="category" placeholder="e.g., Travel" required>
                 </div>
                 <div class="form-group">
+                    <label>Category Image URL (Optional)</label>
+                    <input type="url" id="categoryImage" placeholder="https://example.com/image.jpg">
+                    <div class="help-text">Add an image URL to display on the category button. Only one template per category needs this.</div>
+                </div>
+                <div class="form-group">
                     <label>Admin Token</label>
                     <input type="password" id="adminToken" required>
                 </div>
                 <button type="submit" class="btn btn-primary">➕ Add Template</button>
+            </form>
+        </div>
+
+        <div class="card" id="editSection">
+            <h2 style="margin-bottom: 1.5rem;">Edit Template</h2>
+            <form id="editForm">
+                <input type="hidden" id="editId">
+                <div class="form-group">
+                    <label>Template Name</label>
+                    <input type="text" id="editName" required>
+                </div>
+                <div class="form-group">
+                    <label>Canva URL</label>
+                    <input type="url" id="editUrl" required>
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <input type="text" id="editCategory" required>
+                </div>
+                <div class="form-group">
+                    <label>Category Image URL (Optional)</label>
+                    <input type="url" id="editCategoryImage" placeholder="https://example.com/image.jpg">
+                    <div class="help-text">Add an image URL to display on the category button. Only one template per category needs this.</div>
+                </div>
+                <div class="form-group">
+                    <label>Admin Token</label>
+                    <input type="password" id="editAdminToken" required>
+                </div>
+                <button type="submit" class="btn btn-primary">💾 Save Changes</button>
+                <button type="button" class="btn btn-secondary" onclick="cancelEdit()">Cancel</button>
             </form>
         </div>
 
@@ -861,10 +901,36 @@ app.get("/admin/templates", (req, res) => {
                         <h3>\${t.name}</h3>
                         <span class="category-badge">\${t.category}</span>
                         <a href="\${t.url}" target="_blank" style="color: #667eea;">View →</a>
+                        \${t.categoryImage ? '<br><small style="color: #6b7280;">📷 Has category image</small>' : ''}
                     </div>
-                    <button class="btn btn-danger" onclick="deleteTemplate('\${t.id}')">🗑️</button>
+                    <div class="btn-group">
+                        <button class="btn btn-warning" onclick='editTemplate(\${JSON.stringify(t)})'>✏️ Edit</button>
+                        <button class="btn btn-danger" onclick="deleteTemplate('\${t.id}')">🗑️ Delete</button>
+                    </div>
                 </div>
             \`).join('');
+        }
+
+        function editTemplate(template) {
+            // Show edit section, hide add section
+            document.getElementById('editSection').style.display = 'block';
+            document.getElementById('addSection').style.display = 'none';
+            
+            // Populate form
+            document.getElementById('editId').value = template.id;
+            document.getElementById('editName').value = template.name;
+            document.getElementById('editUrl').value = template.url;
+            document.getElementById('editCategory').value = template.category;
+            document.getElementById('editCategoryImage').value = template.categoryImage || '';
+            
+            // Scroll to edit form
+            document.getElementById('editSection').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function cancelEdit() {
+            document.getElementById('editSection').style.display = 'none';
+            document.getElementById('addSection').style.display = 'block';
+            document.getElementById('editForm').reset();
         }
 
         document.getElementById('templateForm').addEventListener('submit', async (e) => {
@@ -873,7 +939,8 @@ app.get("/admin/templates", (req, res) => {
             const data = {
                 name: document.getElementById('name').value,
                 url: document.getElementById('url').value,
-                category: document.getElementById('category').value
+                category: document.getElementById('category').value,
+                categoryImage: document.getElementById('categoryImage').value || undefined
             };
 
             const res = await fetch('/api/admin/canva-templates', {
@@ -887,12 +954,40 @@ app.get("/admin/templates", (req, res) => {
                 document.getElementById('templateForm').reset();
                 loadTemplates();
             } else {
-                alert('❌ Failed');
+                const error = await res.json();
+                alert('❌ Failed: ' + (error.error || 'Unknown error'));
+            }
+        });
+
+        document.getElementById('editForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('editId').value;
+            const token = document.getElementById('editAdminToken').value;
+            const data = {
+                name: document.getElementById('editName').value,
+                url: document.getElementById('editUrl').value,
+                category: document.getElementById('editCategory').value,
+                categoryImage: document.getElementById('editCategoryImage').value || undefined
+            };
+
+            const res = await fetch(\`/api/admin/canva-templates/\${id}\`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+                body: JSON.stringify(data)
+            });
+
+            if (res.ok) {
+                alert('✅ Updated!');
+                cancelEdit();
+                loadTemplates();
+            } else {
+                const error = await res.json();
+                alert('❌ Failed: ' + (error.error || 'Unknown error'));
             }
         });
 
         async function deleteTemplate(id) {
-            if (!confirm('Delete?')) return;
+            if (!confirm('Delete this template?')) return;
             const token = prompt('Admin token:');
             
             const res = await fetch(\`/api/admin/canva-templates/\${id}\`, {
