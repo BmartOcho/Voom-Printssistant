@@ -113,11 +113,32 @@ export class CanvaApiClient {
 
   /**
    * List folders accessible to the user
+   * Note: Canva API doesn't have a direct /folders endpoint.
+   * We list items in the root folder and filter for folders.
    */
   async listFolders(): Promise<CanvaFolder[]> {
     try {
-      const response = await this.client.get("/folders");
-      return response.data.items || [];
+      // List items in the root folder, filtering for folder types
+      const response = await this.client.get("/folders/root/items", {
+        params: {
+          item_types: "folder",
+          limit: 100, // Get up to 100 folders
+        },
+      });
+      
+      const items = response.data.items || [];
+      
+      // Transform to CanvaFolder format
+      // Note: The API returns { type: "folder", folder: { id, name, ... } }
+      return items
+        .filter((item: any) => item.type === "folder" && item.folder)
+        .map((item: any) => ({
+          id: item.folder.id,
+          name: item.folder.name,
+          type: item.type,
+          created_at: item.folder.created_at,
+          updated_at: item.folder.updated_at,
+        }));
     } catch (error) {
       throw this.handleError(error, "Failed to list folders");
     }
@@ -130,10 +151,26 @@ export class CanvaApiClient {
     try {
       const response = await this.client.get(`/folders/${folderId}/items`, {
         params: {
-          types: "design",
+          item_types: "design", // Changed from 'types' to 'item_types'
         },
       });
-      return response.data.items || [];
+      
+      const items = response.data.items || [];
+      
+      // Transform to CanvaDesign format
+      // Note: The API returns { type: "design", design: { id, title, ... } }
+      return items
+        .filter((item: any) => item.type === "design" && item.design)
+        .map((item: any) => ({
+          id: item.design.id,
+          title: item.design.title,
+          width: item.design.width,
+          height: item.design.height,
+          thumbnail: item.thumbnail,
+          urls: item.design.urls,
+          created_at: item.design.created_at,
+          updated_at: item.design.updated_at,
+        }));
     } catch (error) {
       throw this.handleError(error, `Failed to list designs in folder ${folderId}`);
     }

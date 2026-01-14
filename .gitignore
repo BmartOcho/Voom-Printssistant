@@ -4,6 +4,12 @@ dist
 backend/data
 .DS_Store
 
+# Debug files (contain API responses with tokens)
+backend/*.json
+backend/designs-*.json
+backend/canva-api-debug.json
+test-api.ps1
+
 # Old Canva app (to be deleted after restart)
 canva-app/
 canva-app-backup-app.tsx

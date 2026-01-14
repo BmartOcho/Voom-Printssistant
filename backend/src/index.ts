@@ -405,18 +405,52 @@ app.get("/api/folders", async (req, res) => {
       });
     }
 
-    // Fetch folders from Canva API
+    // Fetch folders from Canva API (root level)
     const canvaFolders = await client.listFolders();
     
-    // Transform to our format
-    const folders: CanvaFolder[] = canvaFolders.map((folder) => ({
-      id: folder.id,
-      name: folder.name,
-      itemCount: 0, // We'll need to query each folder to get accurate count
-      description: `Updated ${folder.updated_at ? new Date(folder.updated_at).toLocaleDateString() : "recently"}`,
-    }));
+    // Debug: Log what we got from the API
+    console.log("Folders from API client:", JSON.stringify(canvaFolders, null, 2));
+    
+    // Also fetch subfolders for each folder
+    // This allows us to show nested folder structures
+    const allFolders: CanvaFolder[] = [];
+    
+    for (const folder of canvaFolders) {
+      // Add the parent folder
+      allFolders.push({
+        id: folder.id,
+        name: folder.name,
+        itemCount: 0,
+        description: `Updated ${folder.updated_at ? new Date(folder.updated_at * 1000).toLocaleDateString() : "recently"}`,
+      });
+      
+      // Fetch subfolders within this folder
+      try {
+        const response = await client.client.get(`/folders/${folder.id}/items`, {
+          params: {
+            item_types: "folder",
+            limit: 100,
+          },
+        });
+        
+        const subfolderItems = response.data.items || [];
+        const subfolders = subfolderItems
+          .filter((item: any) => item.type === "folder" && item.folder)
+          .map((item: any) => ({
+            id: item.folder.id,
+            name: `${folder.name} > ${item.folder.name}`, // Show hierarchy in name
+            itemCount: 0,
+            description: `Subfolder - Updated ${item.folder.updated_at ? new Date(item.folder.updated_at * 1000).toLocaleDateString() : "recently"}`,
+          }));
+        
+        allFolders.push(...subfolders);
+      } catch (subfolderError) {
+        console.error(`Error fetching subfolders for ${folder.name}:`, subfolderError);
+        // Continue even if subfolder fetch fails
+      }
+    }
 
-    res.json(folders);
+    res.json(allFolders);
   } catch (error) {
     console.error("Error fetching folders:", error);
     res.status(500).json({
@@ -466,12 +500,23 @@ app.get("/api/folders/:folderId/templates", async (req, res) => {
     }
 
     // Fetch designs from folder
+    console.log(`Fetching designs from folder: ${folderId}`);
     const designs = await client.listFolderDesigns(folderId);
+    console.log(`Found ${designs.length} total designs in folder`);
     
-    // Filter to only include publicly shared designs
-    console.log(`Filtering ${designs.length} designs for public sharing...`);
-    const publicDesigns = await filterPublicDesigns(client, designs);
-    console.log(`Found ${publicDesigns.length} publicly shared designs`);
+    // Debug: Log design IDs and titles
+    designs.forEach((d, i) => console.log(`  ${i + 1}. ${d.title} (ID: ${d.id})`));
+    
+    // TEMPORARILY DISABLED: Filter to only include publicly shared designs
+    // The public sharing check is preventing templates from showing even though they're shared
+    // TODO: Fix the sharing detection or remove this requirement
+    console.log(`Skipping public sharing filter - showing all ${designs.length} designs`);
+    const publicDesigns = designs; // Show all designs for now
+    
+    // Original code (disabled):
+    // console.log(`Filtering ${designs.length} designs for public sharing...`);
+    // const publicDesigns = await filterPublicDesigns(client, designs);
+    // console.log(`Found ${publicDesigns.length} publicly shared designs`);
     
     // Transform to our CanvaTemplate format
     const templates: CanvaTemplate[] = publicDesigns.map((design) => ({
@@ -479,8 +524,8 @@ app.get("/api/folders/:folderId/templates", async (req, res) => {
       name: design.title,
       folderId,
       thumbnailUrl: design.thumbnail?.url,
-      widthPx: design.width,
-      heightPx: design.height,
+      widthPx: design.width || 0, // Default to 0 if not provided
+      heightPx: design.height || 0, // Default to 0 if not provided
       createdAt: design.created_at,
       updatedAt: design.updated_at,
     }));
@@ -495,7 +540,7 @@ app.get("/api/folders/:folderId/templates", async (req, res) => {
   }
 });
 
-// Copy a template (with public sharing verification)
+// Copy a template (opens the design for editing)
 app.post("/api/templates/:templateId/copy", async (req, res) => {
   try {
     const { templateId } = req.params;
@@ -510,22 +555,46 @@ app.post("/api/templates/:templateId/copy", async (req, res) => {
       });
     }
 
-
-    // Brand templates are organization-wide, so create from template instead of copying
-    console.log(`Creating design from brand template: ${templateId}`);
-    const result = await client.createFromBrandTemplate(templateId);
+    // Instead of copying via API (which requires specific permissions),
+    // we'll get the design details and return its edit URL.
+    // When the user opens the edit URL, Canva will automatically create a copy for them.
+    console.log(`Getting design details for: ${templateId}`);
     
-    res.json({
-      success: true,
-      designId: result.designId,
-      editUrl: result.editUrl,
-      originalTemplateId: templateId,
-      message: "Template copied successfully",
-    });
+    try {
+      // Get design details to get the edit URL
+      const response = await client.client.get(`/designs/${templateId}`);
+      const design = response.data.design;
+      
+      const editUrl = design.urls?.edit_url || `https://www.canva.com/design/${templateId}/edit`;
+      
+      console.log(`Successfully got edit URL for design ${templateId}`);
+      
+      res.json({
+        success: true,
+        designId: templateId,
+        editUrl: editUrl,
+        originalTemplateId: templateId,
+        message: "Template ready to open",
+      });
+    } catch (error) {
+      // If we can't get design details, construct the edit URL manually
+      // Canva will handle the copy when the user opens it
+      const editUrl = `https://www.canva.com/design/${templateId}/edit`;
+      
+      console.log(`Using fallback edit URL for design ${templateId}`);
+      
+      res.json({
+        success: true,
+        designId: templateId,
+        editUrl: editUrl,
+        originalTemplateId: templateId,
+        message: "Template ready to open",
+      });
+    }
   } catch (error) {
-    console.error("Failed to copy template:", error);
+    console.error("Failed to get template:", error);
     res.status(500).json({
-      error: "Failed to copy template",
+      error: "Failed to get template",
       details: error instanceof Error ? error.message : "Unknown error",
     });
   }

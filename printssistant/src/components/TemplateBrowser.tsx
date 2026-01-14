@@ -1,6 +1,6 @@
 /**
  * Template Browser Component
- * Displays organization templates organized by categories
+ * Displays organization templates from Canva Connect API with hierarchical navigation
  */
 
 import { useState, useEffect } from "react";
@@ -12,8 +12,6 @@ import {
   Text,
   LoadingIndicator,
   Alert,
-  Columns,
-  Column,
   ImageCard,
 } from "@canva/app-ui-kit";
 import { requestOpenExternalUrl } from "@canva/platform";
@@ -24,104 +22,342 @@ declare const BACKEND_HOST: string;
 
 interface TemplateBrowserProps {
   onBack: () => void;
+  onTemplateSelected?: (designId: string, editUrl: string) => void;
 }
 
-interface Template {
+interface CanvaFolder {
   id: string;
   name: string;
-  url: string;
-  category: string;
-  categoryImage?: string;
+  itemCount: number;
+  description?: string;
 }
 
-interface CategoryInfo {
+interface CanvaTemplate {
+  id: string;
   name: string;
-  imageUrl?: string;
-  templateCount: number;
+  folderId: string;
+  thumbnailUrl?: string;
+  widthPx?: number;
+  heightPx?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
+
+type ViewState = 'root-folders' | 'subfolders' | 'templates' | 'copying';
 
 export const TemplateBrowser = ({
   onBack,
+  onTemplateSelected,
 }: TemplateBrowserProps) => {
-  const intl = useIntl();
-  const [templates, setTemplates] = useState<Template[]>([]);
+  
+  // State management
+  const [viewState, setViewState] = useState<ViewState>('root-folders');
+  const [allFolders, setAllFolders] = useState<CanvaFolder[]>([]);
+  const [rootFolders, setRootFolders] = useState<CanvaFolder[]>([]);
+  const [subfolders, setSubfolders] = useState<CanvaFolder[]>([]);
+  const [templates, setTemplates] = useState<CanvaTemplate[]>([]);
+  const [selectedRootFolder, setSelectedRootFolder] = useState<CanvaFolder | null>(null);
+  const [selectedFolder, setSelectedFolder] = useState<CanvaFolder | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [authError, setAuthError] = useState(false);
 
+  // Fetch folders on mount
   useEffect(() => {
-    // Fetch templates from backend
-    fetch(`${BACKEND_HOST}/api/canva-templates`)
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error('Failed to load templates');
-        }
-        return res.json();
-      })
-      .then((data) => {
-        setTemplates(data);
-        setError(null);
-      })
-      .catch(() => {
-        setError('Unable to load templates');
-        setTemplates([]);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    fetchFolders();
   }, []);
 
-  const handleOpenTemplate = async (templateUrl: string) => {
+  const fetchFolders = async () => {
+    setLoading(true);
+    setError(null);
+    setAuthError(false);
+    
     try {
-      await requestOpenExternalUrl({ url: templateUrl });
-    } catch {
-      // Error handled silently; user will see no action if it fails
+      const response = await fetch(`${BACKEND_HOST}/api/folders`);
+      
+      if (response.status === 503) {
+        // Not authenticated
+        setAuthError(true);
+        setError('Organization Canva account not authenticated. Please contact your administrator to complete OAuth setup.');
+        setAllFolders([]);
+        setRootFolders([]);
+        return;
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to load folders: ${response.statusText}`);
+      }
+      
+      const data: CanvaFolder[] = await response.json();
+      setAllFolders(data);
+      
+      // Separate root folders from subfolders
+      // Root folders don't have " > " in their name
+      const roots = data.filter(f => !f.name.includes(' > '));
+      
+      setRootFolders(roots);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to load folders');
+      setAllFolders([]);
+      setRootFolders([]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Group templates by category
-  const getCategoryInfo = (): CategoryInfo[] => {
-    const categoryMap = new Map<string, CategoryInfo>();
+  const handleRootFolderClick = (folder: CanvaFolder) => {
+    setSelectedRootFolder(folder);
     
-    templates.forEach((template) => {
-      const existing = categoryMap.get(template.category);
-      if (existing) {
-        existing.templateCount++;
-        // Use the first template's image if available
-        if (!existing.imageUrl && template.categoryImage) {
-          existing.imageUrl = template.categoryImage;
-        }
-      } else {
-        categoryMap.set(template.category, {
-          name: template.category,
-          imageUrl: template.categoryImage,
-          templateCount: 1,
-        });
-      }
-    });
-
-    return Array.from(categoryMap.values()).sort((a, b) => 
-      a.name.localeCompare(b.name)
+    // Find all subfolders that belong to this root folder
+    const folderSubfolders = allFolders.filter(f => 
+      f.name.startsWith(folder.name + ' > ')
     );
+    
+    if (folderSubfolders.length > 0) {
+      // Has subfolders, show them
+      setSubfolders(folderSubfolders);
+      setViewState('subfolders');
+    } else {
+      // No subfolders, load templates directly
+      setSelectedFolder(folder);
+      fetchTemplates(folder.id);
+    }
   };
 
-  const getTemplatesForCategory = (category: string): Template[] => {
-    return templates.filter((t) => t.category === category);
+  const handleSubfolderClick = (folder: CanvaFolder) => {
+    setSelectedFolder(folder);
+    fetchTemplates(folder.id);
   };
 
-  // Show category selection view
-  if (!selectedCategory) {
-    const categories = getCategoryInfo();
+  const fetchTemplates = async (folderId: string) => {
+    setLoading(true);
+    setError(null);
+    setViewState('templates');
+    
+    try {
+      const response = await fetch(`${BACKEND_HOST}/api/folders/${folderId}/templates`);
+      
+      if (response.status === 503) {
+        setAuthError(true);
+        setError('Organization Canva account not authenticated.');
+        setTemplates([]);
+        return;
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to load templates: ${response.statusText}`);
+      }
+      
+      const data: CanvaTemplate[] = await response.json();
+      setTemplates(data);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to load templates');
+      setTemplates([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  const handleTemplateCopy = async (template: CanvaTemplate) => {
+    setViewState('copying');
+    setError(null);
+    
+    try {
+      const response = await fetch(`${BACKEND_HOST}/api/templates/${template.id}/copy`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.status === 503) {
+        setAuthError(true);
+        setError('Organization Canva account not authenticated.');
+        setViewState('templates');
+        return;
+      }
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || 'Failed to copy template');
+      }
+      
+      const result = await response.json();
+      
+      // Open the new design in Canva
+      if (result.editUrl) {
+        await requestOpenExternalUrl({ url: result.editUrl });
+      }
+      
+      // Notify parent component if callback provided
+      if (onTemplateSelected && result.designId) {
+        onTemplateSelected(result.designId, result.editUrl);
+      }
+      
+      // Return to root folders view
+      setViewState('root-folders');
+      setSelectedRootFolder(null);
+      setSelectedFolder(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to copy template');
+      setViewState('templates');
+    }
+  };
+
+  const handleBackToRootFolders = () => {
+    setViewState('root-folders');
+    setSelectedRootFolder(null);
+    setSelectedFolder(null);
+    setSubfolders([]);
+    setTemplates([]);
+  };
+
+  const handleBackToSubfolders = () => {
+    setViewState('subfolders');
+    setSelectedFolder(null);
+    setTemplates([]);
+  };
+
+  // Render root folders view
+  if (viewState === 'root-folders') {
     return (
       <div className={styles.scrollContainer}>
         <Rows spacing="2u">
-          <Title size="medium">
-            <FormattedMessage
-              defaultMessage="Select a Category"
-              description="Title for category selection screen"
-            />
-          </Title>
+          <Rows spacing="1u">
+            <Title size="small">
+              <FormattedMessage
+                defaultMessage="Select Template Category"
+                description="Title for template browser"
+              />
+            </Title>
+            <Text>
+              <FormattedMessage
+                defaultMessage="Choose a category to browse templates"
+                description="Subtitle for folder selection"
+              />
+            </Text>
+          </Rows>
+
+          {loading && (
+            <Rows spacing="1u" align="center">
+              <LoadingIndicator size="medium" />
+              <Text>
+                <FormattedMessage
+                  defaultMessage="Loading categories..."
+                  description="Loading message for folders"
+                />
+              </Text>
+            </Rows>
+          )}
+
+          {error && (
+            <Alert tone={authError ? "warn" : "critical"}>
+              <Text>{error}</Text>
+              {authError && (
+                <Text size="small">
+                  <FormattedMessage
+                    defaultMessage="Administrator: Visit /auth/canva to authenticate"
+                    description="Authentication instruction"
+                  />
+                </Text>
+              )}
+            </Alert>
+          )}
+
+          {!loading && !error && rootFolders.length === 0 && (
+            <Alert tone="info">
+              <Text>
+                <FormattedMessage
+                  defaultMessage="No folders found. Create folders in Canva and add templates to them."
+                  description="Message when no folders are available"
+                />
+              </Text>
+            </Alert>
+          )}
+
+          {!loading && rootFolders.length > 0 && (
+            <Rows spacing="1u">
+              {rootFolders.map((folder) => (
+                <Button
+                  key={folder.id}
+                  variant="primary"
+                  onClick={() => handleRootFolderClick(folder)}
+                  stretch
+                >
+                  {folder.name}
+                </Button>
+              ))}
+            </Rows>
+          )}
+
+          <Button variant="secondary" onClick={onBack} stretch>
+            Back
+          </Button>
+        </Rows>
+      </div>
+    );
+  }
+
+  // Render subfolders view
+  if (viewState === 'subfolders') {
+    return (
+      <div className={styles.scrollContainer}>
+        <Rows spacing="2u">
+          <Rows spacing="1u">
+            <Title size="small">
+              {selectedRootFolder?.name}
+            </Title>
+            <Text>
+              <FormattedMessage
+                defaultMessage="Select a subcategory"
+                description="Subtitle for subfolder selection"
+              />
+            </Text>
+          </Rows>
+
+          <Rows spacing="1u">
+            {subfolders.map((folder) => {
+              // Extract just the subfolder name (after " > ")
+              const subfolderName = folder.name.split(' > ')[1] || folder.name;
+              return (
+                <Button
+                  key={folder.id}
+                  variant="primary"
+                  onClick={() => handleSubfolderClick(folder)}
+                  stretch
+                >
+                  {subfolderName}
+                </Button>
+              );
+            })}
+          </Rows>
+
+          <Button variant="secondary" onClick={handleBackToRootFolders} stretch>
+            Back to Categories
+          </Button>
+        </Rows>
+      </div>
+    );
+  }
+
+  // Render templates view
+  if (viewState === 'templates') {
+    return (
+      <div className={styles.scrollContainer}>
+        <Rows spacing="2u">
+          <Rows spacing="1u">
+            <Title size="small">
+              {selectedFolder?.name.split(' > ').pop() || selectedFolder?.name}
+            </Title>
+            <Text>
+              <FormattedMessage
+                defaultMessage="Select a template to copy"
+                description="Subtitle for template selection"
+              />
+            </Text>
+          </Rows>
 
           {loading && (
             <Rows spacing="1u" align="center">
@@ -136,7 +372,7 @@ export const TemplateBrowser = ({
           )}
 
           {error && (
-            <Alert tone="critical">
+            <Alert tone={authError ? "warn" : "critical"}>
               <Text>{error}</Text>
             </Alert>
           )}
@@ -145,136 +381,65 @@ export const TemplateBrowser = ({
             <Alert tone="info">
               <Text>
                 <FormattedMessage
-                  defaultMessage="No templates available. Contact your administrator to add templates."
+                  defaultMessage="No templates found in this folder."
                   description="Message when no templates are available"
                 />
               </Text>
             </Alert>
           )}
 
-          {!loading && categories.length > 0 && (
-            <Rows spacing="1u">
-              {categories.map((category) => (
-                <div
-                  key={category.name}
-                  style={{
-                    border: '1px solid #e0e0e0',
-                    borderRadius: '8px',
-                    overflow: 'hidden',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                  }}
-                  onClick={() => setSelectedCategory(category.name)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      setSelectedCategory(category.name);
-                    }
-                  }}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <Rows spacing="0">
-                    {category.imageUrl && (
-                      <ImageCard
-                        alt={category.name}
-                        ariaLabel={category.name}
-                        thumbnailUrl={category.imageUrl}
-                        onClick={() => setSelectedCategory(category.name)}
-                      />
-                    )}
-                    <div style={{ padding: '12px' }}>
-                      <Columns spacing="1u" alignY="center">
-                        <Column width="fluid">
-                          <Text size="medium" tone="primary">
-                            {category.name}
-                          </Text>
-                        </Column>
-                        <Column width="content">
-                          <Text size="small" tone="tertiary">
-                            <FormattedMessage
-                              defaultMessage="{count} {count, plural, one {template} other {templates}}"
-                              description="Template count in category"
-                              values={{ count: category.templateCount }}
-                            />
-                          </Text>
-                        </Column>
-                      </Columns>
-                    </div>
-                  </Rows>
+          {!loading && templates.length > 0 && (
+            <Rows spacing="2u">
+              {templates.map((template) => (
+                <div key={template.id}>
+                  {template.thumbnailUrl ? (
+                    <ImageCard
+                      ariaLabel={template.name}
+                      alt={template.name}
+                      thumbnailUrl={template.thumbnailUrl}
+                      onClick={() => handleTemplateCopy(template)}
+                      borderRadius="standard"
+                    />
+                  ) : (
+                    <Button
+                      variant="primary"
+                      onClick={() => handleTemplateCopy(template)}
+                      stretch
+                    >
+                      {template.name}
+                    </Button>
+                  )}
+                  <Text size="small">
+                    {template.name}
+                  </Text>
                 </div>
               ))}
             </Rows>
           )}
 
-          <Button variant="secondary" onClick={onBack}>
-            {intl.formatMessage({
-              defaultMessage: "Back",
-              description: "Button to go back to previous screen"
-            })}
+          <Button 
+            variant="secondary" 
+            onClick={selectedRootFolder && subfolders.length > 0 ? handleBackToSubfolders : handleBackToRootFolders} 
+            stretch
+          >
+            Back
           </Button>
         </Rows>
       </div>
     );
   }
 
-  // Show templates within selected category
-  const categoryTemplates = getTemplatesForCategory(selectedCategory);
-
+  // Render copying state
   return (
     <div className={styles.scrollContainer}>
-      <Rows spacing="2u">
-        <Title size="medium">
-          {selectedCategory}
+      <Rows spacing="2u" align="center">
+        <LoadingIndicator size="medium" />
+        <Title size="small">
+          Copying template...
         </Title>
-
-        <Text tone="tertiary">
-          <FormattedMessage
-            defaultMessage="Select a template to open in Canva"
-            description="Subtitle for template selection"
-          />
+        <Text>
+          Please wait while we create your design
         </Text>
-
-        {categoryTemplates.length > 0 && (
-          <Rows spacing="1u">
-            {categoryTemplates.map((template) => (
-              <Button
-                key={template.id}
-                variant="primary"
-                onClick={() => handleOpenTemplate(template.url)}
-                stretch
-              >
-                {template.name}
-              </Button>
-            ))}
-          </Rows>
-        )}
-
-        <Columns spacing="1u">
-          <Column width="fluid">
-            <Button 
-              variant="secondary" 
-              onClick={() => setSelectedCategory(null)}
-              stretch
-            >
-              {intl.formatMessage({
-                defaultMessage: "Back to Categories",
-                description: "Button to go back to category selection"
-              })}
-            </Button>
-          </Column>
-          <Column width="fluid">
-            <Button 
-              variant="secondary" 
-              onClick={onBack}
-              stretch
-            >
-              {intl.formatMessage({
-                defaultMessage: "Exit",
-                description: "Button to exit template browser"
-              })}
-            </Button>
-          </Column>
-        </Columns>
       </Rows>
     </div>
   );

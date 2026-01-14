@@ -17,6 +17,20 @@ export interface Template {
 
 const TEMPLATES_FILE = path.join(__dirname, '../templates.json');
 
+/**
+ * @deprecated This file-based template system is deprecated in favor of live Canva Connect API.
+ * 
+ * The app now fetches templates directly from Canva via OAuth-authenticated API calls.
+ * This class is kept for backward compatibility with the admin UI but should not be used
+ * for new features.
+ * 
+ * Migration path:
+ * - Use `/api/folders` to list Canva folders
+ * - Use `/api/folders/:folderId/templates` to list templates
+ * - Use `/api/templates/:templateId/copy` to copy templates
+ * 
+ * See TEMPLATE_INTEGRATION.md for details on the new API integration.
+ */
 export class TemplateManager {
   private async readTemplates(): Promise<Template[]> {
     try {
