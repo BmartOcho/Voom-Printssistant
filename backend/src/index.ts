@@ -31,6 +31,7 @@ import {
 } from "./canva-auth.js";
 import { CanvaApiClient, filterPublicDesigns, type CanvaDesignWithSharing } from "./canva-api.js";
 import { TokenStorage } from "./token-storage.js";
+import { TemplateManager } from "./template-manager.js";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? "*";
@@ -46,6 +47,7 @@ const TOKEN_ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY ?? "change-me-in-p
 
 const db = new JsonDb(DATA_DIR);
 const tokenStorage = new TokenStorage(DATA_DIR, TOKEN_ENCRYPTION_KEY);
+const templateManager = new TemplateManager();
 
 const canvaAuthConfig: CanvaAuthConfig = {
   clientId: CANVA_CLIENT_ID,
@@ -539,6 +541,84 @@ const adminAuth = (req: express.Request, res: express.Response, next: express.Ne
   next();
 };
 
+// --- Template Management API ---
+
+// Get all templates (public - no auth required)
+app.get("/api/canva-templates", async (req, res) => {
+  try {
+    const templates = await templateManager.listTemplates();
+    res.json(templates);
+  } catch (error) {
+    console.error("Error fetching templates:", error);
+    res.status(500).json({ error: "Failed to fetch templates" });
+  }
+});
+
+// Get categories (public)
+app.get("/api/canva-templates/categories", async (req, res) => {
+  try {
+    const categories = await templateManager.getCategories();
+    res.json(categories);
+  } catch (error) {
+    console.error("Error fetching categories:", error);
+    res.status(500).json({ error: "Failed to fetch categories" });
+  }
+});
+
+// Admin: Create template
+app.post("/api/admin/canva-templates", adminAuth, async (req, res) => {
+  try {
+    const { name, url, category, categoryImage } = req.body;
+    
+    if (!name || !url || !category) {
+      return res.status(400).json({ error: "Missing required fields: name, url, category" });
+    }
+
+    const template = await templateManager.createTemplate({ name, url, category, categoryImage });
+    res.json(template);
+  } catch (error) {
+    console.error("Error creating template:", error);
+    res.status(500).json({ error: "Failed to create template" });
+  }
+});
+
+// Admin: Update template
+app.put("/api/admin/canva-templates/:id", adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, url, category, categoryImage } = req.body;
+
+    const template = await templateManager.updateTemplate(id, { name, url, category, categoryImage });
+    
+    if (!template) {
+      return res.status(404).json({ error: "Template not found" });
+    }
+
+    res.json(template);
+  } catch (error) {
+    console.error("Error updating template:", error);
+    res.status(500).json({ error: "Failed to update template" });
+  }
+});
+
+// Admin: Delete template
+app.delete("/api/admin/canva-templates/:id", adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleted = await templateManager.deleteTemplate(id);
+    
+    if (!deleted) {
+      return res.status(404).json({ error: "Template not found" });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting template:", error);
+    res.status(500).json({ error: "Failed to delete template" });
+  }
+});
+
+
 app.get("/api/admin/rules", adminAuth, (req, res) => {
   res.json(db.listRules());
 });
@@ -658,6 +738,270 @@ app.get("/admin", (req, res) => {
                 alert("Invalid JSON");
             }
         }
+    </script>
+</body>
+</html>
+    `);
+});
+
+// Add this to backend/src/index.ts right before "// --- Jobs Dashboard ---"
+
+app.get("/admin/templates", (req, res) => {
+    res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Template Manager</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: white; margin-bottom: 2rem; text-align: center; font-size: 2.5rem; }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .form-group { margin-bottom: 1.5rem; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #333; }
+        input { width: 100%; padding: 0.75rem; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 1rem; }
+        input:focus { outline: none; border-color: #667eea; }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .btn-secondary { background: #6b7280; color: white; margin-left: 0.5rem; }
+        .btn-warning { background: #f59e0b; color: white; margin-left: 0.5rem; }
+        .btn-danger { background: #ef4444; color: white; margin-left: 0.5rem; }
+        .template-item {
+            background: #f9fafb;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .category-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            background: #667eea;
+            color: white;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            margin-right: 0.5rem;
+        }
+        .btn-group { display: flex; gap: 0.5rem; }
+        #editSection { display: none; }
+        .help-text { font-size: 0.875rem; color: #6b7280; margin-top: 0.25rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 Template Manager</h1>
+        
+        <div class="card" id="addSection">
+            <h2 style="margin-bottom: 1.5rem;">Add New Template</h2>
+            <form id="templateForm">
+                <div class="form-group">
+                    <label>Template Name</label>
+                    <input type="text" id="name" placeholder="e.g., Luggage Tags" required>
+                </div>
+                <div class="form-group">
+                    <label>Canva URL</label>
+                    <input type="url" id="url" placeholder="https://www.canva.com/design/..." required>
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <input type="text" id="category" placeholder="e.g., Travel" required>
+                </div>
+                <div class="form-group">
+                    <label>Category Image URL (Optional)</label>
+                    <input type="url" id="categoryImage" placeholder="https://example.com/image.jpg">
+                    <div class="help-text">Add an image URL to display on the category button. Only one template per category needs this.</div>
+                </div>
+                <div class="form-group">
+                    <label>Admin Token</label>
+                    <input type="password" id="adminToken" required>
+                </div>
+                <button type="submit" class="btn btn-primary">➕ Add Template</button>
+            </form>
+        </div>
+
+        <div class="card" id="editSection">
+            <h2 style="margin-bottom: 1.5rem;">Edit Template</h2>
+            <form id="editForm">
+                <input type="hidden" id="editId">
+                <div class="form-group">
+                    <label>Template Name</label>
+                    <input type="text" id="editName" required>
+                </div>
+                <div class="form-group">
+                    <label>Canva URL</label>
+                    <input type="url" id="editUrl" required>
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <input type="text" id="editCategory" required>
+                </div>
+                <div class="form-group">
+                    <label>Category Image URL (Optional)</label>
+                    <input type="url" id="editCategoryImage" placeholder="https://example.com/image.jpg">
+                    <div class="help-text">Add an image URL to display on the category button. Only one template per category needs this.</div>
+                </div>
+                <div class="form-group">
+                    <label>Admin Token</label>
+                    <input type="password" id="editAdminToken" required>
+                </div>
+                <button type="submit" class="btn btn-primary">💾 Save Changes</button>
+                <button type="button" class="btn btn-secondary" onclick="cancelEdit()">Cancel</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2 style="margin-bottom: 1.5rem;">Templates</h2>
+            <div id="templateList"></div>
+        </div>
+    </div>
+
+    <script>
+        let templates = [];
+        
+        async function loadTemplates() {
+            const res = await fetch('/api/canva-templates');
+            templates = await res.json();
+            renderTemplates();
+        }
+
+        function renderTemplates() {
+            const list = document.getElementById('templateList');
+            if (!templates.length) {
+                list.innerHTML = '<p style="color: #6b7280; text-align: center;">No templates yet!</p>';
+                return;
+            }
+
+            list.innerHTML = templates.map(t => \`
+                <div class="template-item">
+                    <div>
+                        <h3>\${t.name}</h3>
+                        <span class="category-badge">\${t.category}</span>
+                        <a href="\${t.url}" target="_blank" style="color: #667eea;">View →</a>
+                        \${t.categoryImage ? '<br><small style="color: #6b7280;">📷 Has category image</small>' : ''}
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-warning" onclick='editTemplate(\${JSON.stringify(t)})'>✏️ Edit</button>
+                        <button class="btn btn-danger" onclick="deleteTemplate('\${t.id}')">🗑️ Delete</button>
+                    </div>
+                </div>
+            \`).join('');
+        }
+
+        function editTemplate(template) {
+            // Show edit section, hide add section
+            document.getElementById('editSection').style.display = 'block';
+            document.getElementById('addSection').style.display = 'none';
+            
+            // Populate form
+            document.getElementById('editId').value = template.id;
+            document.getElementById('editName').value = template.name;
+            document.getElementById('editUrl').value = template.url;
+            document.getElementById('editCategory').value = template.category;
+            document.getElementById('editCategoryImage').value = template.categoryImage || '';
+            
+            // Scroll to edit form
+            document.getElementById('editSection').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function cancelEdit() {
+            document.getElementById('editSection').style.display = 'none';
+            document.getElementById('addSection').style.display = 'block';
+            document.getElementById('editForm').reset();
+        }
+
+        document.getElementById('templateForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const token = document.getElementById('adminToken').value;
+            const data = {
+                name: document.getElementById('name').value,
+                url: document.getElementById('url').value,
+                category: document.getElementById('category').value,
+                categoryImage: document.getElementById('categoryImage').value || undefined
+            };
+
+            const res = await fetch('/api/admin/canva-templates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+                body: JSON.stringify(data)
+            });
+
+            if (res.ok) {
+                alert('✅ Added!');
+                document.getElementById('templateForm').reset();
+                loadTemplates();
+            } else {
+                const error = await res.json();
+                alert('❌ Failed: ' + (error.error || 'Unknown error'));
+            }
+        });
+
+        document.getElementById('editForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('editId').value;
+            const token = document.getElementById('editAdminToken').value;
+            const data = {
+                name: document.getElementById('editName').value,
+                url: document.getElementById('editUrl').value,
+                category: document.getElementById('editCategory').value,
+                categoryImage: document.getElementById('editCategoryImage').value || undefined
+            };
+
+            const res = await fetch(\`/api/admin/canva-templates/\${id}\`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+                body: JSON.stringify(data)
+            });
+
+            if (res.ok) {
+                alert('✅ Updated!');
+                cancelEdit();
+                loadTemplates();
+            } else {
+                const error = await res.json();
+                alert('❌ Failed: ' + (error.error || 'Unknown error'));
+            }
+        });
+
+        async function deleteTemplate(id) {
+            if (!confirm('Delete this template?')) return;
+            const token = prompt('Admin token:');
+            
+            const res = await fetch(\`/api/admin/canva-templates/\${id}\`, {
+                method: 'DELETE',
+                headers: { 'X-Admin-Token': token }
+            });
+
+            if (res.ok) {
+                alert('✅ Deleted!');
+                loadTemplates();
+            }
+        }
+
+        loadTemplates();
     </script>
 </body>
 </html>

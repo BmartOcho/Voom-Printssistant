@@ -1,198 +1,280 @@
 /**
  * Template Browser Component
- * Displays organization brand templates for users to select
+ * Displays organization templates organized by categories
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { FormattedMessage, useIntl } from "react-intl";
 import {
-  Alert,
   Button,
-  ImageCard,
-  LoadingIndicator,
   Rows,
-  Text,
   Title,
+  Text,
+  LoadingIndicator,
+  Alert,
+  Columns,
+  Column,
+  ImageCard,
 } from "@canva/app-ui-kit";
-import type { CanvaTemplate } from "@printssistant/shared";
+import { requestOpenExternalUrl } from "@canva/platform";
 import * as styles from "styles/components.css";
 
-interface BrandTemplate {
-  id: string;
-  title: string;
-  view_url: string;
-  create_url: string;
-  thumbnail?: {
-    width: number;
-    height: number;
-    url: string;
-  };
-  created_at?: number;
-  updated_at?: number;
-}
+// Global variable injected by Webpack
+declare const BACKEND_HOST: string;
 
 interface TemplateBrowserProps {
-  onSelectTemplate: (template: CanvaTemplate) => void;
   onBack: () => void;
 }
 
+interface Template {
+  id: string;
+  name: string;
+  url: string;
+  category: string;
+  categoryImage?: string;
+}
+
+interface CategoryInfo {
+  name: string;
+  imageUrl?: string;
+  templateCount: number;
+}
+
 export const TemplateBrowser = ({
-  onSelectTemplate,
   onBack,
 }: TemplateBrowserProps) => {
   const intl = useIntl();
-  const [templates, setTemplates] = useState<BrandTemplate[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  // Fetch brand templates on component mount
   useEffect(() => {
-    fetchTemplates();
+    // Fetch templates from backend
+    fetch(`${BACKEND_HOST}/api/canva-templates`)
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error('Failed to load templates');
+        }
+        return res.json();
+      })
+      .then((data) => {
+        setTemplates(data);
+        setError(null);
+      })
+      .catch(() => {
+        setError('Unable to load templates');
+        setTemplates([]);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
-  const fetchTemplates = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const handleOpenTemplate = async (templateUrl: string) => {
     try {
-      // Use global BACKEND_HOST injected by Webpack
-      const backendHost = typeof BACKEND_HOST !== 'undefined' ? BACKEND_HOST : "http://localhost:8787";
-      const response = await fetch(`${backendHost}/api/brand-templates`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch templates: ${response.statusText}`);
-      }
-      const data = await response.json();
-      setTemplates(data);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load templates"
-      );
-    } finally {
-      setLoading(false);
+      await requestOpenExternalUrl({ url: templateUrl });
+    } catch {
+      // Error handled silently; user will see no action if it fails
     }
-  }, []);
+  };
 
-  const handleTemplateClick = useCallback(
-    (template: BrandTemplate) => {
-      // Convert brand template to CanvaTemplate format
-      const canvaTemplate: CanvaTemplate = {
-        id: template.id,
-        name: template.title,
-        folderId: "brand-templates",
-        thumbnailUrl: template.thumbnail?.url,
-        widthPx: template.thumbnail?.width || 800,
-        heightPx: template.thumbnail?.height || 600,
-        createdAt: template.created_at
-          ? new Date(template.created_at * 1000).toISOString()
-          : new Date().toISOString(),
-        updatedAt: template.updated_at
-          ? new Date(template.updated_at * 1000).toISOString()
-          : new Date().toISOString(),
-      };
-      onSelectTemplate(canvaTemplate);
-    },
-    [onSelectTemplate]
-  );
+  // Group templates by category
+  const getCategoryInfo = (): CategoryInfo[] => {
+    const categoryMap = new Map<string, CategoryInfo>();
+    
+    templates.forEach((template) => {
+      const existing = categoryMap.get(template.category);
+      if (existing) {
+        existing.templateCount++;
+        // Use the first template's image if available
+        if (!existing.imageUrl && template.categoryImage) {
+          existing.imageUrl = template.categoryImage;
+        }
+      } else {
+        categoryMap.set(template.category, {
+          name: template.category,
+          imageUrl: template.categoryImage,
+          templateCount: 1,
+        });
+      }
+    });
+
+    return Array.from(categoryMap.values()).sort((a, b) => 
+      a.name.localeCompare(b.name)
+    );
+  };
+
+  const getTemplatesForCategory = (category: string): Template[] => {
+    return templates.filter((t) => t.category === category);
+  };
+
+  // Show category selection view
+  if (!selectedCategory) {
+    const categories = getCategoryInfo();
+
+    return (
+      <div className={styles.scrollContainer}>
+        <Rows spacing="2u">
+          <Title size="medium">
+            <FormattedMessage
+              defaultMessage="Select a Category"
+              description="Title for category selection screen"
+            />
+          </Title>
+
+          {loading && (
+            <Rows spacing="1u" align="center">
+              <LoadingIndicator size="medium" />
+              <Text>
+                <FormattedMessage
+                  defaultMessage="Loading templates..."
+                  description="Loading message for templates"
+                />
+              </Text>
+            </Rows>
+          )}
+
+          {error && (
+            <Alert tone="critical">
+              <Text>{error}</Text>
+            </Alert>
+          )}
+
+          {!loading && !error && templates.length === 0 && (
+            <Alert tone="info">
+              <Text>
+                <FormattedMessage
+                  defaultMessage="No templates available. Contact your administrator to add templates."
+                  description="Message when no templates are available"
+                />
+              </Text>
+            </Alert>
+          )}
+
+          {!loading && categories.length > 0 && (
+            <Rows spacing="1u">
+              {categories.map((category) => (
+                <div
+                  key={category.name}
+                  style={{
+                    border: '1px solid #e0e0e0',
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                  onClick={() => setSelectedCategory(category.name)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      setSelectedCategory(category.name);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <Rows spacing="0">
+                    {category.imageUrl && (
+                      <ImageCard
+                        alt={category.name}
+                        ariaLabel={category.name}
+                        thumbnailUrl={category.imageUrl}
+                        onClick={() => setSelectedCategory(category.name)}
+                      />
+                    )}
+                    <div style={{ padding: '12px' }}>
+                      <Columns spacing="1u" alignY="center">
+                        <Column width="fluid">
+                          <Text size="medium" tone="primary">
+                            {category.name}
+                          </Text>
+                        </Column>
+                        <Column width="content">
+                          <Text size="small" tone="tertiary">
+                            <FormattedMessage
+                              defaultMessage="{count} {count, plural, one {template} other {templates}}"
+                              description="Template count in category"
+                              values={{ count: category.templateCount }}
+                            />
+                          </Text>
+                        </Column>
+                      </Columns>
+                    </div>
+                  </Rows>
+                </div>
+              ))}
+            </Rows>
+          )}
+
+          <Button variant="secondary" onClick={onBack}>
+            {intl.formatMessage({
+              defaultMessage: "Back",
+              description: "Button to go back to previous screen"
+            })}
+          </Button>
+        </Rows>
+      </div>
+    );
+  }
+
+  // Show templates within selected category
+  const categoryTemplates = getTemplatesForCategory(selectedCategory);
 
   return (
     <div className={styles.scrollContainer}>
       <Rows spacing="2u">
-        {/* Header */}
-        <Rows spacing="1u">
-          <Title size="medium">
-            <FormattedMessage
-              defaultMessage="Browse Templates"
-              description="Template browser title"
-            />
-          </Title>
-          <Text>
-            <FormattedMessage
-              defaultMessage="Select a template to get started"
-              description="Template browser subtitle"
-            />
-          </Text>
-        </Rows>
+        <Title size="medium">
+          {selectedCategory}
+        </Title>
 
-        {/* Error Alert */}
-        {error && (
-          <Alert tone="critical">
-            <Text>{error}</Text>
-          </Alert>
-        )}
+        <Text tone="tertiary">
+          <FormattedMessage
+            defaultMessage="Select a template to open in Canva"
+            description="Subtitle for template selection"
+          />
+        </Text>
 
-        {/* Loading State */}
-        {loading && (
-          <Rows spacing="1u" align="center">
-            <LoadingIndicator size="medium" />
-            <Text>
-              <FormattedMessage
-                defaultMessage="Loading templates..."
-                description="Loading templates message"
-              />
-            </Text>
-          </Rows>
-        )}
-
-        {/* Templates List */}
-        {!loading && templates.length > 0 && (
+        {categoryTemplates.length > 0 && (
           <Rows spacing="1u">
-            {templates.map((template) => (
-              <div
+            {categoryTemplates.map((template) => (
+              <Button
                 key={template.id}
-                style={{
-                  padding: "12px",
-                  border: "1px solid #e0e0e0",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                  transition: "all 0.2s",
-                }}
-                onClick={() => handleTemplateClick(template)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    handleTemplateClick(template);
-                  }
-                }}
-                role="button"
-                tabIndex={0}
+                variant="primary"
+                onClick={() => handleOpenTemplate(template.url)}
+                stretch
               >
-                <Rows spacing="1u">
-                  {template.thumbnail && (
-                    <ImageCard
-                      alt={template.title}
-                      ariaLabel={template.title}
-                      thumbnailUrl={template.thumbnail.url}
-                      onDragStart={() => {
-                        // Drag handler
-                      }}
-                    />
-                  )}
-                  <Text size="medium" tone="primary">
-                    {template.title}
-                  </Text>
-                </Rows>
-              </div>
+                {template.name}
+              </Button>
             ))}
           </Rows>
         )}
 
-        {/* Empty State */}
-        {!loading && templates.length === 0 && !error && (
-          <Alert tone="info">
-            <Text>
-              <FormattedMessage
-                defaultMessage="No templates available"
-                description="Empty templates message"
-              />
-            </Text>
-          </Alert>
-        )}
-
-        {/* Actions */}
-        <Button variant="secondary" onClick={onBack}>
-          {intl.formatMessage({
-            defaultMessage: "Back",
-            description: "Back button",
-          })}
-        </Button>
+        <Columns spacing="1u">
+          <Column width="fluid">
+            <Button 
+              variant="secondary" 
+              onClick={() => setSelectedCategory(null)}
+              stretch
+            >
+              {intl.formatMessage({
+                defaultMessage: "Back to Categories",
+                description: "Button to go back to category selection"
+              })}
+            </Button>
+          </Column>
+          <Column width="fluid">
+            <Button 
+              variant="secondary" 
+              onClick={onBack}
+              stretch
+            >
+              {intl.formatMessage({
+                defaultMessage: "Exit",
+                description: "Button to exit template browser"
+              })}
+            </Button>
+          </Column>
+        </Columns>
       </Rows>
     </div>
   );

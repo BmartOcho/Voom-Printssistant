@@ -1,0 +1,168 @@
+// Add this to backend/src/index.ts right before "// --- Jobs Dashboard ---"
+
+app.get("/admin/templates", (req, res) => {
+    res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Template Manager</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: white; margin-bottom: 2rem; text-align: center; font-size: 2.5rem; }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .form-group { margin-bottom: 1.5rem; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #333; }
+        input { width: 100%; padding: 0.75rem; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 1rem; }
+        input:focus { outline: none; border-color: #667eea; }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .btn-danger { background: #ef4444; color: white; margin-left: 0.5rem; }
+        .template-item {
+            background: #f9fafb;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .category-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            background: #667eea;
+            color: white;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            margin-right: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 Template Manager</h1>
+        
+        <div class="card">
+            <h2 style="margin-bottom: 1.5rem;">Add New Template</h2>
+            <form id="templateForm">
+                <div class="form-group">
+                    <label>Template Name</label>
+                    <input type="text" id="name" placeholder="e.g., Luggage Tags" required>
+                </div>
+                <div class="form-group">
+                    <label>Canva URL</label>
+                    <input type="url" id="url" placeholder="https://www.canva.com/design/..." required>
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <input type="text" id="category" placeholder="e.g., Travel" required>
+                </div>
+                <div class="form-group">
+                    <label>Admin Token</label>
+                    <input type="password" id="adminToken" required>
+                </div>
+                <button type="submit" class="btn btn-primary">➕ Add Template</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2 style="margin-bottom: 1.5rem;">Templates</h2>
+            <div id="templateList"></div>
+        </div>
+    </div>
+
+    <script>
+        let templates = [];
+        
+        async function loadTemplates() {
+            const res = await fetch('/api/templates');
+            templates = await res.json();
+            renderTemplates();
+        }
+
+        function renderTemplates() {
+            const list = document.getElementById('templateList');
+            if (!templates.length) {
+                list.innerHTML = '<p style="color: #6b7280; text-align: center;">No templates yet!</p>';
+                return;
+            }
+
+            list.innerHTML = templates.map(t => \`
+                <div class="template-item">
+                    <div>
+                        <h3>\${t.name}</h3>
+                        <span class="category-badge">\${t.category}</span>
+                        <a href="\${t.url}" target="_blank" style="color: #667eea;">View →</a>
+                    </div>
+                    <button class="btn btn-danger" onclick="deleteTemplate('\${t.id}')">🗑️</button>
+                </div>
+            \`).join('');
+        }
+
+        document.getElementById('templateForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const token = document.getElementById('adminToken').value;
+            const data = {
+                name: document.getElementById('name').value,
+                url: document.getElementById('url').value,
+                category: document.getElementById('category').value
+            };
+
+            const res = await fetch('/api/admin/templates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+                body: JSON.stringify(data)
+            });
+
+            if (res.ok) {
+                alert('✅ Added!');
+                document.getElementById('templateForm').reset();
+                loadTemplates();
+            } else {
+                alert('❌ Failed');
+            }
+        });
+
+        async function deleteTemplate(id) {
+            if (!confirm('Delete?')) return;
+            const token = prompt('Admin token:');
+            
+            const res = await fetch(\`/api/admin/templates/\${id}\`, {
+                method: 'DELETE',
+                headers: { 'X-Admin-Token': token }
+            });
+
+            if (res.ok) {
+                alert('✅ Deleted!');
+                loadTemplates();
+            }
+        }
+
+        loadTemplates();
+    </script>
+</body>
+</html>
+    `);
+});
